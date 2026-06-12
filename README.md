@@ -1,6 +1,17 @@
 # Garmin Activity Exporter
 
-Export all Garmin Connect activities to local JSON files for later analysis.
+A private-first archive tool for turning a Garmin Connect account into a local, reusable activity dataset. It pulls activity summaries and detail payloads into JSON files so future analysis, dashboards, and visualizations can work from your own disk instead of repeatedly touching the Garmin service.
+
+## Project Information
+
+- Author: `mail@marcelpetrick.it`
+- License: GPLv3
+- Version: `0.0.2`
+- Runtime: Python 3.11+
+
+## Usage Terms
+
+This project is distributed under the GNU General Public License v3.0. You may use, study, modify, and redistribute it under the terms of GPLv3.
 
 ## Setup
 
@@ -10,12 +21,11 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Set `GARMIN_EMAIL` and `GARMIN_PASSWORD` in your shell or in a local `.env` loader of your choice. Do not commit `.env`.
+Set `GARMIN_EMAIL` in your shell or in ignored local `.env`. The password is always entered manually at runtime and is not read from files or environment variables.
 
 ```bash
 read -r GARMIN_EMAIL
-read -rs GARMIN_PASSWORD
-export GARMIN_EMAIL GARMIN_PASSWORD
+export GARMIN_EMAIL
 ```
 
 ## Export
@@ -24,7 +34,7 @@ export GARMIN_EMAIL GARMIN_PASSWORD
 python -m garmin_export
 ```
 
-By default, exported data is written under `data/garmin/activities/`, which is ignored by git. Authentication tokens are stored outside the repository by the `garminconnect` package unless `GARMIN_TOKENSTORE` is set.
+By default, exported data is written under `data/garmin/activities/`, which is ignored by git. Authentication tokens are stored outside the repository by the `garminconnect` package unless `GARMIN_TOKENSTORE` is set. Do not point `GARMIN_TOKENSTORE` at a tracked repository path.
 
 Useful options:
 
@@ -32,7 +42,16 @@ Useful options:
 python -m garmin_export --output-dir data/garmin/activities --page-size 100
 python -m garmin_export --no-details
 python -m garmin_export --activity-type running
+python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
 ```
+
+## Local Pipeline
+
+```bash
+./localPipeline.sh
+```
+
+The pipeline creates or reuses `.venv`, installs dependencies, runs linting and static analysis, builds the package, runs tests, performs a CLI smoke run, and prints a summary.
 
 ## Privacy
 

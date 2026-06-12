@@ -4,11 +4,11 @@ import argparse
 import getpass
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
-
+from typing import Any, Protocol, cast
 
 DEFAULT_OUTPUT_DIR = Path("data/garmin/activities")
 DEFAULT_PAGE_SIZE = 100
@@ -20,6 +20,15 @@ class GarminClient(Protocol):
 
     def get_activities(
         self, start: int = 0, limit: int = 20, activitytype: str | None = None
+    ) -> list[dict[str, Any]]:
+        ...
+
+    def get_activities_by_date(
+        self,
+        startdate: str,
+        enddate: str | None = None,
+        activitytype: str | None = None,
+        sortorder: str | None = None,
     ) -> list[dict[str, Any]]:
         ...
 
@@ -36,6 +45,8 @@ class ExportConfig:
     page_size: int
     include_details: bool
     activity_type: str | None
+    start_date: str | None
+    end_date: str | None
     tokenstore: str | None
 
 
@@ -46,16 +57,20 @@ class ExportResult:
     activity_count: int
     include_details: bool
     activity_type: str | None
+    start_date: str | None
+    end_date: str | None
     files: list[str]
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     config = ExportConfig(
         output_dir=args.output_dir,
         page_size=args.page_size,
         include_details=not args.no_details,
         activity_type=args.activity_type,
+        start_date=args.start_date,
+        end_date=args.end_date,
         tokenstore=args.tokenstore,
     )
 
@@ -70,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Export Garmin Connect activities to ignored local JSON files."
     )
@@ -93,7 +108,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--activity-type",
-        help="Optional Garmin activity type filter such as running, cycling, or swimming.",
+        help=(
+            "Optional Garmin activity type filter such as running, cycling, "
+            "or swimming."
+        ),
+    )
+    parser.add_argument(
+        "--start-date",
+        help="Optional export start date in YYYY-MM-DD format.",
+    )
+    parser.add_argument(
+        "--end-date",
+        help="Optional export end date in YYYY-MM-DD format.",
     )
     parser.add_argument(
         "--tokenstore",
@@ -104,21 +130,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     if args.page_size < 1:
         parser.error("--page-size must be at least 1")
+    validate_date_arg(parser, "--start-date", args.start_date)
+    validate_date_arg(parser, "--end-date", args.end_date)
+    if args.end_date and not args.start_date:
+        parser.error("--end-date requires --start-date")
 
     return args
 
 
 def build_client() -> GarminClient:
     try:
-        from garminconnect import Garmin
+        from garminconnect import Garmin  # type: ignore[import-untyped]
     except ImportError as exc:
         raise SystemExit(
             "Missing dependency: run `python -m pip install -r requirements.txt`."
         ) from exc
 
+    load_local_env(Path(".env"))
     email = os.getenv("GARMIN_EMAIL") or input("Garmin email: ")
-    password = os.getenv("GARMIN_PASSWORD") or getpass.getpass("Garmin password: ")
-    return Garmin(email, password, prompt_mfa=lambda: input("Garmin MFA code: "))
+    password = getpass.getpass("Garmin password: ")
+    return cast(
+        GarminClient,
+        Garmin(email, password, prompt_mfa=lambda: input("Garmin MFA code: ")),
+    )
 
 
 def export_activities(client: GarminClient, config: ExportConfig) -> ExportResult:
@@ -129,7 +163,7 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     exported_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     files: list[str] = []
 
-    for activity in iter_activities(client, config.page_size, config.activity_type):
+    for activity in collect_activities(client, config):
         activity_id = extract_activity_id(activity)
         payload: dict[str, Any] = {"summary": activity}
 
@@ -147,10 +181,25 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
         activity_count=len(files),
         include_details=config.include_details,
         activity_type=config.activity_type,
+        start_date=config.start_date,
+        end_date=config.end_date,
         files=files,
     )
     write_json(config.output_dir / "manifest.json", asdict(manifest))
     return manifest
+
+
+def collect_activities(
+    client: GarminClient, config: ExportConfig
+) -> list[dict[str, Any]]:
+    if config.start_date:
+        return client.get_activities_by_date(
+            startdate=config.start_date,
+            enddate=config.end_date,
+            activitytype=config.activity_type,
+        )
+
+    return iter_activities(client, config.page_size, config.activity_type)
 
 
 def iter_activities(
@@ -179,7 +228,33 @@ def extract_activity_id(activity: dict[str, Any]) -> str:
     raise ValueError(f"Activity is missing an id field: {activity!r}")
 
 
+def validate_date_arg(
+    parser: argparse.ArgumentParser, argument_name: str, value: str | None
+) -> None:
+    if value is None:
+        return
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        parser.error(f"{argument_name} must use YYYY-MM-DD format")
+
+
 def write_json(path: Path, payload: Any) -> None:
     with path.open("w", encoding="utf-8") as file:
         json.dump(payload, file, indent=2, sort_keys=True, ensure_ascii=False)
         file.write("\n")
+
+
+def load_local_env(path: Path, allowed_keys: set[str] | None = None) -> None:
+    allowed = allowed_keys or {"GARMIN_EMAIL", "GARMIN_TOKENSTORE"}
+    if not path.exists():
+        return
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if key in allowed:
+            os.environ.setdefault(key, value.strip().strip("\"'"))

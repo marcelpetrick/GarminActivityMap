@@ -1,2 +1,2 @@
 garminconnect==0.3.5
-curl_cffi>=0.7
+curl-cffi==0.15.0
