@@ -1,15 +1,28 @@
+import getpass as getpass_module
+import json
 import os
+import sys
+from argparse import ArgumentParser
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from pytest import MonkeyPatch
+import pytest
+from pytest import CaptureFixture, MonkeyPatch
 
+from garmin_export import cli
 from garmin_export.cli import (
     ExportConfig,
+    build_client,
     collect_activities,
     export_activities,
+    extract_activity_id,
     iter_activities,
     load_local_env,
+    main,
+    parse_args,
+    validate_date_arg,
+    write_json,
 )
 
 
@@ -124,3 +137,158 @@ def test_load_local_env_ignores_password_values(
 
     assert "GARMIN_EMAIL" in os.environ
     assert "GARMIN_PASSWORD" not in os.environ
+
+
+def test_export_activities_without_details_skips_detail_calls(tmp_path: Path) -> None:
+    client = FakeClient()
+    config = ExportConfig(
+        output_dir=tmp_path,
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+    )
+
+    result = export_activities(client, config)
+    payload = json.loads((tmp_path / "activities" / "101.json").read_text())
+
+    assert result.activity_count == 3
+    assert payload == {
+        "summary": {
+            "activityId": 101,
+            "activityName": "One",
+            "activityType": None,
+        }
+    }
+    assert client.detail_calls == []
+
+
+def test_parse_args_accepts_date_range_and_tokenstore(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GARMIN_TOKENSTORE", "/tmp/garmin-tokenstore")
+
+    args = parse_args(
+        [
+            "--output-dir",
+            "exports/test",
+            "--page-size",
+            "5",
+            "--no-details",
+            "--activity-type",
+            "running",
+            "--start-date",
+            "2026-05-13",
+            "--end-date",
+            "2026-06-13",
+        ]
+    )
+
+    assert args.output_dir == Path("exports/test")
+    assert args.page_size == 5
+    assert args.no_details is True
+    assert args.activity_type == "running"
+    assert args.start_date == "2026-05-13"
+    assert args.end_date == "2026-06-13"
+    assert args.tokenstore == "/tmp/garmin-tokenstore"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--page-size", "0"],
+        ["--start-date", "2026/05/13"],
+        ["--end-date", "2026-06-13"],
+    ],
+)
+def test_parse_args_rejects_invalid_values(argv: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        parse_args(argv)
+
+
+def test_extract_activity_id_supports_known_keys() -> None:
+    assert extract_activity_id({"activity_id": 42}) == "42"
+    assert extract_activity_id({"id": "abc"}) == "abc"
+
+
+def test_extract_activity_id_rejects_missing_id() -> None:
+    with pytest.raises(ValueError, match="missing an id"):
+        extract_activity_id({"activityName": "missing"})
+
+
+def test_validate_date_arg_accepts_none_and_valid_date() -> None:
+    parser = ArgumentParser()
+
+    validate_date_arg(parser, "--start-date", None)
+    validate_date_arg(parser, "--start-date", "2026-06-13")
+
+
+def test_write_json_writes_sorted_pretty_json(tmp_path: Path) -> None:
+    output = tmp_path / "payload.json"
+
+    write_json(output, {"z": 1, "a": 2})
+
+    assert output.read_text(encoding="utf-8") == '{\n  "a": 2,\n  "z": 1\n}\n'
+
+
+def test_load_local_env_missing_file_is_noop(tmp_path: Path) -> None:
+    load_local_env(tmp_path / "missing.env")
+
+
+def test_load_local_env_respects_existing_values(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARMIN_EMAIL=file@example.invalid\n", encoding="utf-8")
+    monkeypatch.setenv("GARMIN_EMAIL", "existing@example.invalid")
+
+    load_local_env(env_file)
+
+    assert os.environ["GARMIN_EMAIL"] == "existing@example.invalid"
+
+
+def test_build_client_prompts_for_password_without_env_password(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeGarmin:
+        def __init__(
+            self,
+            email: str,
+            password: str,
+            prompt_mfa: Any,
+        ) -> None:
+            captured["email"] = email
+            captured["password"] = password
+            captured["prompt_mfa"] = prompt_mfa
+
+    monkeypatch.setenv("GARMIN_EMAIL", "local@example.invalid")
+    monkeypatch.setenv("GARMIN_PASSWORD", "must-not-be-used")
+    monkeypatch.setattr(getpass_module, "getpass", lambda prompt: "typed-password")
+    monkeypatch.setitem(
+        sys.modules, "garminconnect", SimpleNamespace(Garmin=FakeGarmin)
+    )
+
+    client = build_client()
+
+    assert client is not None
+    assert captured["email"] == "local@example.invalid"
+    assert captured["password"] == "typed-password"
+
+
+def test_main_exports_with_built_client(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    client = FakeClient()
+
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+
+    exit_code = main(["--output-dir", str(tmp_path), "--page-size", "2"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Exported 3 activities" in output
+    assert (tmp_path / "manifest.json").exists()

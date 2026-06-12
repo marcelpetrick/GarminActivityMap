@@ -1,6 +1,6 @@
 [project]
 name = "garmin-visualize-all-activities"
-version = "0.0.2"
+version = "0.0.3"
 description = "Local Garmin Connect activity exporter"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,12 +19,21 @@ include = ["garmin_export*"]
 dev = [
   "build==1.5.0",
   "mypy==2.1.0",
+  "pytest-cov==7.1.0",
   "pytest==9.0.3",
   "ruff==0.15.17",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+  "--cov=garmin_export",
+  "--cov-report=term-missing",
+  "--cov-fail-under=85",
+]
+
+[tool.coverage.run]
+omit = ["garmin_export/__main__.py"]
 
 [tool.ruff]
 target-version = "py311"
