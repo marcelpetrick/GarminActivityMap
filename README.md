@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.9`
+- Version: `0.0.10`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -93,7 +93,17 @@ Troubleshooting:
 ./localPipeline.sh
 ```
 
-The pipeline creates or reuses `.venv`, installs dependencies, runs linting and static analysis, builds the package, runs tests, performs CLI and GUI smoke runs, and prints a summary.
+The pipeline creates or reuses `.venv`, installs dependencies, runs linting and static analysis, builds the documentation, builds the package, runs tests, performs CLI and GUI smoke runs, and prints a summary.
+
+## Architecture Documentation
+
+The C4-style architecture views live in `documents/architecture.md`. Build and validate the local documentation bundle with:
+
+```bash
+python scripts/build_docs.py
+```
+
+Generated documentation output is written to ignored `build/docs/`.
 
 ## Privacy
 

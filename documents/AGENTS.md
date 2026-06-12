@@ -10,6 +10,7 @@
 - Run tests with coverage: `python -m pytest --cov=activity_map --cov=garmin_export --cov-report=term-missing --cov-fail-under=85`
 - Run linting: `python -m ruff check .`
 - Run static analysis: `python -m mypy activity_map garmin_export tests`
+- Build documentation: `python scripts/build_docs.py`
 - Run the full local pipeline: `./localPipeline.sh`
 - Check repository status before every commit: `git status --short`
 
@@ -37,6 +38,7 @@
 - Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and heat aggregation.
 - Add GUI smoke tests where practical without requiring private Garmin data.
 - Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.
+- Keep C4-style architecture documentation valid through the documentation build step.
 - Maintain coverage at or above the configured threshold unless the threshold is raised.
 
 ## Versioning

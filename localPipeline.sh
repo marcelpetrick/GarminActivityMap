@@ -40,6 +40,11 @@ static_analysis() {
   python -m mypy activity_map garmin_export tests
 }
 
+docs_build() {
+  . .venv/bin/activate
+  python scripts/build_docs.py
+}
+
 build() {
   . .venv/bin/activate
   python -m compileall activity_map garmin_export tests
@@ -62,6 +67,7 @@ run_smoke() {
 run_step "bootstrap" bootstrap
 run_step "lint" lint
 run_step "static" static_analysis
+run_step "docs" docs_build
 run_step "build" build
 run_step "test" test_suite
 run_step "run" run_smoke
