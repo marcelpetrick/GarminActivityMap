@@ -1,0 +1,17 @@
+[project]
+name = "garmin-visualize-all-activities"
+version = "0.0.1"
+description = "Local Garmin Connect activity exporter"
+requires-python = ">=3.11"
+dependencies = [
+  "garminconnect==0.3.5",
+  "curl_cffi>=0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

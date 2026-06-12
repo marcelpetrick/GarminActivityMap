@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Private Garmin data and local caches.
+data/
+exports/
+*.session
+session.json
+garmin_tokens.json
