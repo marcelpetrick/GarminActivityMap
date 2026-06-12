@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.7`
+- Version: `0.0.8`
 - Runtime: Python 3.11+
 
 ## Usage Terms

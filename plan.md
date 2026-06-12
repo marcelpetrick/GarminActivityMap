@@ -69,7 +69,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Add visual regression smoke checks that render the map widget offscreen and verify it is non-empty.
    - Profile rendering with synthetic large-track fixtures and keep interaction responsive.
 
-6. Pipeline hardening
+6. Pipeline hardening [done]
    - Extend `localPipeline.sh` to include GUI smoke tests and coverage for `activity_map`.
    - Keep linting and static analysis strict for both packages.
    - Ensure the run smoke check exercises both `python -m garmin_export --help` and a non-interactive app import/entrypoint check.

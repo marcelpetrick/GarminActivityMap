@@ -3,11 +3,13 @@
 ## Commands
 
 - Run the activity exporter: `python -m garmin_export`
+- Run the activity map GUI: `python -m activity_map data/garmin/activities`
+- Run the GUI smoke check: `QT_QPA_PLATFORM=offscreen python -m activity_map --smoke-test`
 - Install runtime dependencies: `python -m pip install -r requirements.txt`
 - Run tests: `python -m pytest`
-- Run tests with coverage: `python -m pytest --cov=garmin_export --cov-report=term-missing --cov-fail-under=85`
+- Run tests with coverage: `python -m pytest --cov=activity_map --cov=garmin_export --cov-report=term-missing --cov-fail-under=85`
 - Run linting: `python -m ruff check .`
-- Run static analysis: `python -m mypy garmin_export tests`
+- Run static analysis: `python -m mypy activity_map garmin_export tests`
 - Run the full local pipeline: `./localPipeline.sh`
 - Check repository status before every commit: `git status --short`
 
@@ -27,12 +29,14 @@
 - Use only synthetic GPS fixtures in tests.
 - The GUI must fail safely on malformed files by reporting skipped files instead of crashing.
 - The map view must support pan, wheel zoom, and visible track/heat rendering before a feature is considered runnable.
+- PyQt tests must run with `QT_QPA_PLATFORM=offscreen` in the local pipeline.
 
 ## Quality Gates
 
 - Every commit must pass `./localPipeline.sh`.
 - Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and heat aggregation.
 - Add GUI smoke tests where practical without requiring private Garmin data.
+- Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.
 - Maintain coverage at or above the configured threshold unless the threshold is raised.
 
 ## Versioning
