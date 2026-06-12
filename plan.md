@@ -74,7 +74,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Keep linting and static analysis strict for both packages.
    - Ensure the run smoke check exercises both `python -m garmin_export --help` and a non-interactive app import/entrypoint check.
 
-7. Documentation
+7. Documentation [done]
    - Update README with GUI run instructions, privacy notes, supported Garmin export shapes, and troubleshooting.
    - Document expected local directory structure under ignored `data/`.
 

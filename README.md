@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.8`
+- Version: `0.0.9`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -51,7 +51,41 @@ python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density on an offline world map. Drag to pan, use the mouse wheel to zoom, and use reset view to fit loaded tracks again.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density on an offline world map. It does not download map tiles or send coordinates to a remote map provider.
+
+Expected local layout:
+
+```text
+data/
+  garmin/
+    activities/
+      manifest.json
+      activities/
+        activity-123456789.json
+        activity-987654321.json
+```
+
+Controls:
+
+- Open Directory: choose a folder containing exported Garmin JSON files.
+- Reset View: fit the visible map back to the loaded tracks.
+- Track Opacity: make individual routes lighter or stronger.
+- Heat Intensity: tune the density overlay.
+- Drag the map to pan, use the mouse wheel to zoom around the cursor, and double-click the map to reset.
+
+Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
+
+For a headless smoke check:
+
+```bash
+QT_QPA_PLATFORM=offscreen python -m activity_map --smoke-test
+```
+
+Troubleshooting:
+
+- If the map opens but no tracks appear, check the warning count in the left rail. The selected files may not contain GPS coordinates.
+- If the GUI cannot start on a server or CI machine, use the offscreen smoke command above.
+- Keep real activity directories under ignored paths such as `data/` or `exports/`; the repository uses synthetic fixtures for tests.
 
 ## Local Pipeline
 
