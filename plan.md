@@ -55,7 +55,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Implement a deterministic heat grid from projected points.
    - Unit test projection edge cases, bounds, pan/zoom transforms, and aggregation.
 
-4. Minimal runnable PyQt app
+4. Minimal runnable PyQt app [done]
    - Add exact pinned PyQt dependency after checking the latest stable release.
    - Add `python -m activity_map`.
    - Implement directory picker, file load summary, interactive map canvas, pan, wheel zoom, and reset view.

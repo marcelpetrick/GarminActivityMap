@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.5`
+- Version: `0.0.6`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -45,13 +45,21 @@ python -m garmin_export --activity-type running
 python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
 ```
 
+## Visualize
+
+```bash
+python -m activity_map data/garmin/activities
+```
+
+The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density on an offline world map. Drag to pan, use the mouse wheel to zoom, and use reset view to fit loaded tracks again.
+
 ## Local Pipeline
 
 ```bash
 ./localPipeline.sh
 ```
 
-The pipeline creates or reuses `.venv`, installs dependencies, runs linting and static analysis, builds the package, runs tests, performs a CLI smoke run, and prints a summary.
+The pipeline creates or reuses `.venv`, installs dependencies, runs linting and static analysis, builds the package, runs tests, performs CLI and GUI smoke runs, and prints a summary.
 
 ## Privacy
 

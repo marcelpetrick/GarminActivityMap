@@ -48,12 +48,15 @@ build() {
 
 test_suite() {
   . .venv/bin/activate
+  export QT_QPA_PLATFORM=offscreen
   python -m pytest
 }
 
 run_smoke() {
   . .venv/bin/activate
+  export QT_QPA_PLATFORM=offscreen
   python -m garmin_export --help >/dev/null
+  python -m activity_map --smoke-test >/dev/null
 }
 
 run_step "bootstrap" bootstrap

@@ -1,2 +1,5 @@
 garminconnect==0.3.5
 curl-cffi==0.15.0
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.1
+PyQt6-sip==13.11.1
