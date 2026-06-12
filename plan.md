@@ -50,7 +50,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Skip invalid coordinates and report skipped files.
    - Unit test valid files, empty files, malformed JSON, missing tracks, and mixed valid/invalid points.
 
-3. Map math and heat aggregation
+3. Map math and heat aggregation [done]
    - Implement coordinate bounds, world wrapping rules, Web Mercator projection, viewport transforms, and zoom scaling.
    - Implement a deterministic heat grid from projected points.
    - Unit test projection edge cases, bounds, pan/zoom transforms, and aggregation.
