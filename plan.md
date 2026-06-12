@@ -37,13 +37,13 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 
 ## Work Items
 
-1. Planning and quality gates
+1. Planning and quality gates [done]
    - Add this plan.
    - Update repository guidance for GUI work, privacy, tests, and per-step commits.
    - Add coverage enforcement to the local pipeline.
    - Run `./localPipeline.sh` and commit after it passes.
 
-2. Data model and parser
+2. Data model and parser [done]
    - Add typed models for `TrackPoint`, `ActivityTrack`, and `LoadReport`.
    - Parse exported JSON structures from `summary`, `activity`, and `details`.
    - Support likely Garmin detail shapes such as `geoPolylineDTO.polyline`, `activityDetailMetrics`, and coordinate-like metric records.

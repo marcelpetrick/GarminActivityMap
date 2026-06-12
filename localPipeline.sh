@@ -37,12 +37,12 @@ lint() {
 
 static_analysis() {
   . .venv/bin/activate
-  python -m mypy garmin_export tests
+  python -m mypy activity_map garmin_export tests
 }
 
 build() {
   . .venv/bin/activate
-  python -m compileall garmin_export tests
+  python -m compileall activity_map garmin_export tests
   python -m build
 }
 
