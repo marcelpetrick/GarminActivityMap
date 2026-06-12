@@ -35,6 +35,7 @@ from .geo import (
 from .heat import HeatCell, build_heat_grid
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
+from .render import RenderHeatCell, RenderTrack, prepare_heat_cells, prepare_tracks
 
 BACKGROUND = QColor("#08111f")
 PANEL = QColor("#101827")
@@ -46,6 +47,7 @@ TRACK_ALT = QColor(255, 195, 65, 130)
 HEAT = QColor(255, 70, 145, 110)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
+HEAT_CELL_SIZE = 0.006
 
 
 class MapCanvas(QWidget):
@@ -54,7 +56,9 @@ class MapCanvas(QWidget):
         self.setMinimumSize(720, 420)
         self.setMouseTracking(True)
         self.tracks: tuple[ActivityTrack, ...] = ()
+        self.render_tracks: tuple[RenderTrack, ...] = ()
         self.heat_cells: tuple[HeatCell, ...] = ()
+        self.render_heat_cells: tuple[RenderHeatCell, ...] = ()
         self.viewport = fit_viewport(None, 960, 540)
         self.track_opacity = 0.72
         self.heat_intensity = 0.70
@@ -62,7 +66,9 @@ class MapCanvas(QWidget):
 
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
         self.tracks = tracks
-        self.heat_cells = build_heat_grid(all_points(tracks), cell_size=0.006)
+        self.render_tracks = prepare_tracks(tracks)
+        self.heat_cells = build_heat_grid(all_points(tracks), cell_size=HEAT_CELL_SIZE)
+        self.render_heat_cells = prepare_heat_cells(self.heat_cells, HEAT_CELL_SIZE)
         self.reset_view()
 
     def reset_view(self) -> None:
@@ -185,36 +191,31 @@ class MapCanvas(QWidget):
         painter.restore()
 
     def _draw_heat(self, painter: QPainter) -> None:
-        if not self.heat_cells or self.heat_intensity <= 0:
+        if not self.render_heat_cells or self.heat_intensity <= 0:
             return
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
-        for cell in self.heat_cells:
+        for cell in self.render_heat_cells:
             alpha = int(180 * cell.intensity * self.heat_intensity)
             color = QColor(HEAT)
             color.setAlpha(max(0, min(220, alpha)))
             painter.setBrush(color)
-            size = max(2.0, min(18.0, self.viewport.zoom * 0.006))
-            screen = self.viewport.world_to_screen(
-                project_point(project_point_for_heat(cell.x_index, cell.y_index, 0.006))
-            )
+            size = max(2.0, min(18.0, self.viewport.zoom * HEAT_CELL_SIZE))
+            screen = self.viewport.world_to_screen(cell.center)
             painter.drawEllipse(QPointF(screen.x, screen.y), size, size)
         painter.restore()
 
     def _draw_tracks(self, painter: QPainter) -> None:
-        if not self.tracks or self.track_opacity <= 0:
+        if not self.render_tracks or self.track_opacity <= 0:
             return
         painter.save()
-        for index, track in enumerate(self.tracks):
+        for index, track in enumerate(self.render_tracks):
             color = QColor(TRACK if index % 2 == 0 else TRACK_ALT)
             color.setAlpha(int(210 * self.track_opacity))
             painter.setPen(QPen(color, 2.2, Qt.PenStyle.SolidLine))
             draw_polyline(
                 painter,
-                [
-                    self.viewport.world_to_screen(project_point(point))
-                    for point in track.points
-                ],
+                [self.viewport.world_to_screen(point) for point in track.points],
             )
         painter.restore()
 
@@ -310,21 +311,6 @@ def draw_polyline(painter: QPainter, points: list[ScreenPoint]) -> None:
         return
     for start, end in zip(points, points[1:], strict=False):
         painter.drawLine(QPointF(start.x, start.y), QPointF(end.x, end.y))
-
-
-def project_point_for_heat(x_index: int, y_index: int, cell_size: float) -> TrackPoint:
-    x = (x_index + 0.5) * cell_size
-    y = (y_index + 0.5) * cell_size
-    longitude = x * 360.0 - 180.0
-    mercator = math_atan_sinh((1.0 - 2.0 * y) * 3.141592653589793)
-    latitude = mercator * 180.0 / 3.141592653589793
-    return TrackPoint(latitude=latitude, longitude=longitude)
-
-
-def math_atan_sinh(value: float) -> float:
-    import math
-
-    return math.atan(math.sinh(value))
 
 
 def rough_land_rects() -> tuple[tuple[float, float, float, float], ...]:

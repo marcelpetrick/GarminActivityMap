@@ -62,7 +62,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Render a simple offline world background, tracks, and heat overlay.
    - Add GUI smoke tests that instantiate widgets in offscreen mode.
 
-5. Modern UI polish
+5. Modern UI polish [done]
    - Implement the dark analysis workspace, left control rail, compact toolbar, and status badges.
    - Add opacity and heat controls that update rendering without reloading files.
    - Add loading and warning states that stay readable on small and large windows.
