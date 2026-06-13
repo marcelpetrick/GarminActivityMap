@@ -18,20 +18,20 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 - `activity_map`: new GUI and map-processing package.
 - `activity_map.loader`: read activity JSON files, extract track points, collect load warnings.
 - `activity_map.geo`: coordinate validation, bounds, Web Mercator projection, viewport transforms.
-- `activity_map.heat`: grid/bin aggregation for activity density.
+- Track rendering only; no heat aggregation or density overlay remains in the GUI.
 - `activity_map.widgets`: PyQt widgets for directory selection, map canvas, status summary, and controls.
 - `python -m activity_map`: runnable GUI entry point.
 
 ## UI Direction
 
 - Build a modern PyQt interface that feels like a polished desktop analysis tool, not a script wrapper.
-- Use a restrained dark map workspace with high-contrast cyan, amber, and magenta route/heat accents.
-- Keep controls obvious and close to the task: directory picker, reload, reset view, track opacity, heat intensity, and activity count summary.
+- Use a restrained dark map workspace with high-contrast track rendering.
+- Keep controls obvious and close to the task: directory picker, reload, reset view, track opacity, track names, and activity count summary.
 - Use a left-side control rail for filters and load status, with the map as the dominant full-window surface.
 - Use clear visual hierarchy: compact title/status area, large interactive map, subtle grid/coastline context, and small badges for loaded files, tracks, points, and warnings.
 - Provide responsive feedback while loading large directories: progress text, disabled reload while busy, and a clear skipped-file warning area.
 - Make pan and zoom feel direct: drag to pan, wheel to zoom around cursor, double-click or toolbar action to reset view.
-- Use anti-aliased track rendering, alpha blending, and heat intensity normalization so dense areas are visually appealing without hiding individual tracks.
+- Use anti-aliased track rendering and alpha blending so dense areas remain readable without hiding individual tracks.
 - Avoid real map tile downloads for the first version; draw an offline world backdrop and projection grid so private tracks are never sent to a remote map provider.
 - Keep all colors, spacing, and visual constants centralized so the UI can be refined without touching parsing or map math.
 
@@ -123,12 +123,24 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Snap scale labels to 1/2/5-style kilometer distances.
    - Cover scale selection and track color updates with tests.
 
+15. Remove heatmap overlay [planned]
+   - Remove heatmap computation from the app load path.
+   - Remove heatmap rendering, legend text, and heat intensity UI controls.
+   - Keep the app focused on Garmin activity tracks only.
+   - Update tests and documentation so no heatmap behavior is advertised as part of the GUI.
+
+16. Optional track name labels [planned]
+   - Add a checkbox that toggles Garmin activity names on the map.
+   - Draw each visible name in a tiny but readable font near the lower-left of its rendered track.
+   - Keep labels off by default so dense maps stay clean.
+   - Test the toggle state and label placement logic with synthetic activity names.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.
 - Unit tests and coverage are enforced in the pipeline.
 - The GUI runs with `python -m activity_map`.
-- The app can load a directory of Garmin JSON files and render tracks plus heat density.
-- The map can render cached OpenStreetMap tiles as a base layer with tracks and heat painted on top.
+- The app can load a directory of Garmin JSON files and render tracks.
+- The map can render cached OpenStreetMap tiles as a base layer with tracks painted on top.
 - Private Garmin data remains ignored and unstaged.
 - Each implementation step lands as a separate conventional commit with a patch version bump.
