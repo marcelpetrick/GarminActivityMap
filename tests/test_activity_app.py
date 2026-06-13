@@ -67,6 +67,21 @@ def test_main_window_loads_directory_and_renders_nonblank_map(
     assert len(sampled_colors) > 1
 
 
+def test_main_window_updates_map_layer_controls(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.canvas.set_tile_opacity(45)
+    window.canvas.set_tile_layer_enabled(False)
+
+    assert window.canvas.tile_opacity == 0.45
+    assert window.canvas.tile_layer_enabled is False
+
+    window.canvas.set_tile_opacity(0)
+
+    assert window.canvas.tile_opacity == 0.0
+
+
 def test_main_smoke_test_returns_success(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

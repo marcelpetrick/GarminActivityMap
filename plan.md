@@ -87,10 +87,17 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 
 9. OpenStreetMap base layer [done]
    - Add OpenStreetMap tile rendering below heat and tracks.
+   - Add an in-app legend explaining track colors and pink/red heat-density dots.
    - Load newly visible map tiles after pan and zoom.
    - Cache downloaded tiles under ignored local storage for faster repeat loads.
+   - Add a base-layer opacity control so the map can sit quietly under the activity data.
    - Keep tests and pipeline deterministic by disabling live tile downloads during automated checks.
    - Document the map layer, cache location, and offline fallback.
+
+10. Deep map zoom [done]
+   - Raise the internal viewport zoom ceiling so users can inspect tracks at much higher detail.
+   - Keep provider tile requests capped to the supported tile zoom and scale cached tiles beyond that point.
+   - Add regression tests for deep viewport zoom and tile-request capping.
 
 ## Done Criteria
 

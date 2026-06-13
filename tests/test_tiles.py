@@ -6,6 +6,7 @@ import pytest
 
 from activity_map.geo import ProjectedPoint, Viewport
 from activity_map.tiles import (
+    MAX_TILE_ZOOM,
     MIN_CACHE_SECONDS,
     TileCache,
     TileCoordinate,
@@ -43,6 +44,20 @@ def test_viewport_tile_zoom_scales_with_map_zoom() -> None:
     assert viewport_tile_zoom(
         Viewport(ProjectedPoint(0.5, 0.5), zoom=4096.0, width=512, height=512)
     ) == 4
+
+
+def test_viewport_tile_zoom_caps_provider_requests_at_tile_limit() -> None:
+    assert (
+        viewport_tile_zoom(
+            Viewport(
+                ProjectedPoint(0.5, 0.5),
+                zoom=1_000_000_000_000.0,
+                width=512,
+                height=512,
+            )
+        )
+        == MAX_TILE_ZOOM
+    )
 
 
 def test_visible_tiles_returns_tiles_for_current_viewport() -> None:

@@ -8,7 +8,7 @@ from .models import TrackPoint
 
 WEB_MERCATOR_LAT_LIMIT = 85.05112878
 MIN_ZOOM = 128.0
-MAX_ZOOM = 1_000_000.0
+MAX_ZOOM = 1_000_000_000_000.0
 
 
 @dataclass(frozen=True, slots=True)

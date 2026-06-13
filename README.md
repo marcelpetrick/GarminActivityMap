@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.12`
+- Version: `0.0.13`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -71,8 +71,14 @@ Controls:
 - Reset View: fit the visible map back to the loaded tracks.
 - Track Opacity: make individual routes lighter or stronger.
 - Heat Intensity: tune the density overlay.
+- Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks and heat visible.
-- Drag the map to pan, use the mouse wheel to zoom around the cursor, and double-click the map to reset.
+- Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
+
+Map colors:
+
+- Cyan and amber lines are activity tracks; the app alternates these colors so overlapping routes are easier to separate.
+- Pink/red dots are heat-density cells, not extra activities. Larger or stronger dots mean more GPS points were aggregated in that area.
 
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
 

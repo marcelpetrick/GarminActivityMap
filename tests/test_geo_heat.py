@@ -1,10 +1,12 @@
 import pytest
 
 from activity_map.geo import (
+    MAX_ZOOM,
     GeoBounds,
     ProjectedPoint,
     ScreenPoint,
     Viewport,
+    clamp_zoom,
     coordinate_bounds,
     fit_viewport,
     normalize_longitude,
@@ -87,6 +89,20 @@ def test_viewport_pan_and_zoom_at_preserve_anchor_world_position() -> None:
     assert after.y == pytest.approx(before.y)
     assert panned.center.x < zoomed.center.x
     assert panned.center.y > zoomed.center.y
+
+
+def test_viewport_allows_deep_zoom_without_early_clamp() -> None:
+    viewport = Viewport(
+        center=ProjectedPoint(0.5, 0.5),
+        zoom=1_000_000.0,
+        width=800,
+        height=500,
+    )
+
+    zoomed = viewport.zoom_at(10_000.0, ScreenPoint(400.0, 250.0))
+
+    assert zoomed.zoom == pytest.approx(10_000_000_000.0)
+    assert clamp_zoom(MAX_ZOOM * 10.0) == MAX_ZOOM
 
 
 def test_build_heat_grid_counts_and_normalizes_cells() -> None:

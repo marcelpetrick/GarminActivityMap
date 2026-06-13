@@ -79,6 +79,7 @@ class MapCanvas(QWidget):
         self.viewport = fit_viewport(None, 960, 540)
         self.track_opacity = 0.72
         self.heat_intensity = 0.70
+        self.tile_opacity = 0.82
         self.tile_layer_enabled = os.environ.get("ACTIVITY_MAP_DISABLE_TILES") != "1"
         self.tile_cache = TileCache()
         self.tile_pixmaps: dict[TileCoordinate, QPixmap] = {}
@@ -113,6 +114,10 @@ class MapCanvas(QWidget):
 
     def set_tile_layer_enabled(self, enabled: bool) -> None:
         self.tile_layer_enabled = enabled
+        self.update()
+
+    def set_tile_opacity(self, value: int) -> None:
+        self.tile_opacity = value / 100.0
         self.update()
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
@@ -224,6 +229,7 @@ class MapCanvas(QWidget):
         if not self.tile_layer_enabled:
             return
         painter.save()
+        painter.setOpacity(self.tile_opacity)
         for coordinate in visible_tiles(self.viewport):
             pixmap = self._tile_pixmap(coordinate)
             if pixmap is None:
@@ -365,6 +371,11 @@ class MainWindow(QMainWindow):
         heat_slider.setValue(70)
         heat_slider.valueChanged.connect(self.canvas.set_heat_intensity)
 
+        map_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        map_opacity_slider.setRange(0, 100)
+        map_opacity_slider.setValue(82)
+        map_opacity_slider.valueChanged.connect(self.canvas.set_tile_opacity)
+
         map_layer_checkbox = QCheckBox("OpenStreetMap layer")
         map_layer_checkbox.setChecked(self.canvas.tile_layer_enabled)
         map_layer_checkbox.toggled.connect(self.canvas.set_tile_layer_enabled)
@@ -381,10 +392,17 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(choose_button)
         side_layout.addWidget(reset_button)
         side_layout.addSpacing(12)
+        side_layout.addWidget(field_label("Legend"))
+        side_layout.addWidget(legend_row(TRACK, "Track lines alternate cyan"))
+        side_layout.addWidget(legend_row(TRACK_ALT, "Track lines alternate amber"))
+        side_layout.addWidget(legend_row(HEAT, "Pink/red dots show heat density"))
+        side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(opacity_slider)
         side_layout.addWidget(field_label("Heat intensity"))
         side_layout.addWidget(heat_slider)
+        side_layout.addWidget(field_label("Map opacity"))
+        side_layout.addWidget(map_opacity_slider)
         side_layout.addWidget(map_layer_checkbox)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Load status"))
@@ -470,6 +488,25 @@ def field_label(text: str) -> QLabel:
     return label
 
 
+def legend_row(color: QColor, text: str) -> QWidget:
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+
+    swatch = QFrame()
+    swatch.setFixedSize(14, 14)
+    swatch.setStyleSheet(
+        f"background: {color.name()}; border-radius: 7px; border: 1px solid #d7e8ff;"
+    )
+
+    label = QLabel(text)
+    label.setObjectName("legendLabel")
+    layout.addWidget(swatch)
+    layout.addWidget(label, 1)
+    return row
+
+
 APP_STYLES = f"""
 QMainWindow {{
     background: {BACKGROUND.name()};
@@ -495,6 +532,10 @@ QLabel#fieldLabel {{
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
+}}
+QLabel#legendLabel {{
+    color: {MUTED};
+    font-size: 12px;
 }}
 QPushButton {{
     background: #1d9bd1;
