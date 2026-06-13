@@ -104,6 +104,12 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Keep the map tile request identity aligned with the application version.
    - Add a GUI regression test for the title text.
 
+12. Garmin export throttling [done]
+   - Add configurable delay and jitter before detailed Garmin activity calls.
+   - Skip existing activity files by default so interrupted exports can resume safely.
+   - Stop immediately on Garmin rate-limit responses instead of retrying aggressively.
+   - Document a cautious 2026 export command.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.

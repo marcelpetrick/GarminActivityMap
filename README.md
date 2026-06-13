@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.14`
+- Version: `0.0.15`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -43,6 +43,23 @@ python -m garmin_export --output-dir data/garmin/activities --page-size 100
 python -m garmin_export --no-details
 python -m garmin_export --activity-type running
 python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
+```
+
+The exporter is intentionally conservative for detailed activity downloads:
+
+- Existing activity JSON files are skipped by default so interrupted exports can resume without repeating calls.
+- Detail downloads wait between requests with `--detail-delay` plus random `--detail-jitter`.
+- A Garmin `429 Too Many Requests` response stops the export instead of retrying aggressively.
+
+For a cautious 2026 export:
+
+```bash
+python -m garmin_export \
+  --start-date 2026-01-01 \
+  --end-date 2026-12-31 \
+  --output-dir data/garmin/activities-2026 \
+  --detail-delay 5 \
+  --detail-jitter 5
 ```
 
 ## Visualize

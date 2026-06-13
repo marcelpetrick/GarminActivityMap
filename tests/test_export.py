@@ -17,10 +17,12 @@ from garmin_export.cli import (
     collect_activities,
     export_activities,
     extract_activity_id,
+    is_rate_limit_error,
     iter_activities,
     load_local_env,
     main,
     parse_args,
+    throttle_before_detail,
     validate_date_arg,
     write_json,
 )
@@ -87,11 +89,15 @@ def test_export_activities_writes_manifest_and_activity_files(tmp_path: Path) ->
         start_date=None,
         end_date=None,
         tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
     )
 
     result = export_activities(client, config)
 
     assert result.activity_count == 3
+    assert result.skipped_existing_count == 0
     assert (tmp_path / "manifest.json").exists()
     assert (tmp_path / "activities" / "101.json").exists()
     assert ("details", "101") in client.detail_calls
@@ -107,6 +113,9 @@ def test_collect_activities_uses_date_range_when_start_date_is_set() -> None:
         start_date="2026-05-13",
         end_date="2026-06-13",
         tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
     )
 
     activities = collect_activities(client, config)
@@ -149,6 +158,9 @@ def test_export_activities_without_details_skips_detail_calls(tmp_path: Path) ->
         start_date=None,
         end_date=None,
         tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
     )
 
     result = export_activities(client, config)
@@ -183,6 +195,10 @@ def test_parse_args_accepts_date_range_and_tokenstore(
             "2026-05-13",
             "--end-date",
             "2026-06-13",
+            "--detail-delay",
+            "1.5",
+            "--detail-jitter",
+            "0.5",
         ]
     )
 
@@ -192,6 +208,9 @@ def test_parse_args_accepts_date_range_and_tokenstore(
     assert args.activity_type == "running"
     assert args.start_date == "2026-05-13"
     assert args.end_date == "2026-06-13"
+    assert args.detail_delay == 1.5
+    assert args.detail_jitter == 0.5
+    assert args.no_skip_existing is False
     assert args.tokenstore == "/tmp/garmin-tokenstore"
 
 
@@ -199,6 +218,8 @@ def test_parse_args_accepts_date_range_and_tokenstore(
     "argv",
     [
         ["--page-size", "0"],
+        ["--detail-delay", "-1"],
+        ["--detail-jitter", "-1"],
         ["--start-date", "2026/05/13"],
         ["--end-date", "2026-06-13"],
     ],
@@ -231,6 +252,83 @@ def test_write_json_writes_sorted_pretty_json(tmp_path: Path) -> None:
     write_json(output, {"z": 1, "a": 2})
 
     assert output.read_text(encoding="utf-8") == '{\n  "a": 2,\n  "z": 1\n}\n'
+
+
+def test_export_skips_existing_activity_files_by_default(tmp_path: Path) -> None:
+    client = FakeClient()
+    activity_file = tmp_path / "activities" / "101.json"
+    activity_file.parent.mkdir(parents=True)
+    activity_file.write_text('{"existing": true}\n', encoding="utf-8")
+    config = ExportConfig(
+        output_dir=tmp_path,
+        page_size=2,
+        include_details=True,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+    )
+
+    result = export_activities(client, config)
+
+    assert result.activity_count == 3
+    assert result.skipped_existing_count == 1
+    assert ("summary", "101") not in client.detail_calls
+    assert json.loads(activity_file.read_text(encoding="utf-8")) == {"existing": True}
+
+
+def test_throttle_before_detail_uses_delay_and_jitter(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    config = ExportConfig(
+        output_dir=Path("unused"),
+        page_size=2,
+        include_details=True,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+        detail_delay_seconds=1.0,
+        detail_jitter_seconds=2.0,
+        skip_existing=True,
+    )
+    monkeypatch.setattr(cli, "jitter_seconds", lambda maximum: 0.75)
+    monkeypatch.setattr(cli, "sleep_seconds", sleeps.append)
+
+    throttle_before_detail(config)
+
+    assert sleeps == [1.75]
+
+
+def test_export_stops_on_rate_limit(tmp_path: Path) -> None:
+    class RateLimitedClient(FakeClient):
+        def get_activity(self, activity_id: str) -> dict[str, Any]:
+            raise RuntimeError("429 Too Many Requests")
+
+    config = ExportConfig(
+        output_dir=tmp_path,
+        page_size=2,
+        include_details=True,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+    )
+
+    with pytest.raises(RuntimeError, match="rate-limit"):
+        export_activities(RateLimitedClient(), config)
+
+
+def test_is_rate_limit_error_checks_status_code_and_message() -> None:
+    assert is_rate_limit_error(RuntimeError("429 Too Many Requests"))
+    assert not is_rate_limit_error(RuntimeError("temporary network failure"))
 
 
 def test_load_local_env_missing_file_is_noop(tmp_path: Path) -> None:

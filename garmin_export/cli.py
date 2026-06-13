@@ -4,6 +4,8 @@ import argparse
 import getpass
 import json
 import os
+import random
+import time
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -12,6 +14,8 @@ from typing import Any, Protocol, cast
 
 DEFAULT_OUTPUT_DIR = Path("data/garmin/activities")
 DEFAULT_PAGE_SIZE = 100
+DEFAULT_DETAIL_DELAY_SECONDS = 3.0
+DEFAULT_DETAIL_JITTER_SECONDS = 2.0
 
 
 class GarminClient(Protocol):
@@ -48,6 +52,9 @@ class ExportConfig:
     start_date: str | None
     end_date: str | None
     tokenstore: str | None
+    detail_delay_seconds: float
+    detail_jitter_seconds: float
+    skip_existing: bool
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,7 @@ class ExportResult:
     start_date: str | None
     end_date: str | None
     files: list[str]
+    skipped_existing_count: int
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -72,6 +80,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         start_date=args.start_date,
         end_date=args.end_date,
         tokenstore=args.tokenstore,
+        detail_delay_seconds=args.detail_delay,
+        detail_jitter_seconds=args.detail_jitter,
+        skip_existing=not args.no_skip_existing,
     )
 
     client = build_client()
@@ -126,10 +137,37 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=os.getenv("GARMIN_TOKENSTORE"),
         help="Optional garminconnect token directory. Defaults to the package default.",
     )
+    parser.add_argument(
+        "--detail-delay",
+        type=float,
+        default=DEFAULT_DETAIL_DELAY_SECONDS,
+        help=(
+            "Seconds to wait before downloading details for each activity. "
+            f"Default: {DEFAULT_DETAIL_DELAY_SECONDS}"
+        ),
+    )
+    parser.add_argument(
+        "--detail-jitter",
+        type=float,
+        default=DEFAULT_DETAIL_JITTER_SECONDS,
+        help=(
+            "Additional random seconds added to each detail wait. "
+            f"Default: {DEFAULT_DETAIL_JITTER_SECONDS}"
+        ),
+    )
+    parser.add_argument(
+        "--no-skip-existing",
+        action="store_true",
+        help="Re-download activity files even when they already exist.",
+    )
     args = parser.parse_args(argv)
 
     if args.page_size < 1:
         parser.error("--page-size must be at least 1")
+    if args.detail_delay < 0:
+        parser.error("--detail-delay must be at least 0")
+    if args.detail_jitter < 0:
+        parser.error("--detail-jitter must be at least 0")
     validate_date_arg(parser, "--start-date", args.start_date)
     validate_date_arg(parser, "--end-date", args.end_date)
     if args.end_date and not args.start_date:
@@ -162,17 +200,37 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
 
     exported_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     files: list[str] = []
+    skipped_existing_count = 0
 
     for activity in collect_activities(client, config):
         activity_id = extract_activity_id(activity)
+        relative_file = Path("activities") / f"{activity_id}.json"
+        output_file = config.output_dir / relative_file
+
+        if config.skip_existing and output_file.exists():
+            files.append(relative_file.as_posix())
+            skipped_existing_count += 1
+            continue
+
         payload: dict[str, Any] = {"summary": activity}
 
         if config.include_details:
-            payload["activity"] = client.get_activity(activity_id)
-            payload["details"] = client.get_activity_details(activity_id)
+            throttle_before_detail(config)
+            try:
+                payload["activity"] = client.get_activity(activity_id)
+                throttle_before_detail(config)
+                payload["details"] = client.get_activity_details(activity_id)
+            except Exception as exc:
+                if is_rate_limit_error(exc):
+                    raise RuntimeError(
+                        "Garmin returned a rate-limit response. "
+                        "Stopping export so the account is not hammered. "
+                        "Wait before retrying; existing files will be skipped "
+                        "by default on the next run."
+                    ) from exc
+                raise
 
-        relative_file = Path("activities") / f"{activity_id}.json"
-        write_json(config.output_dir / relative_file, payload)
+        write_json(output_file, payload)
         files.append(relative_file.as_posix())
 
     manifest = ExportResult(
@@ -184,6 +242,7 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
         start_date=config.start_date,
         end_date=config.end_date,
         files=files,
+        skipped_existing_count=skipped_existing_count,
     )
     write_json(config.output_dir / "manifest.json", asdict(manifest))
     return manifest
@@ -226,6 +285,28 @@ def extract_activity_id(activity: dict[str, Any]) -> str:
         if value:
             return str(value)
     raise ValueError(f"Activity is missing an id field: {activity!r}")
+
+
+def throttle_before_detail(config: ExportConfig) -> None:
+    delay = config.detail_delay_seconds
+    if config.detail_jitter_seconds:
+        delay += jitter_seconds(config.detail_jitter_seconds)
+    if delay > 0:
+        sleep_seconds(delay)
+
+
+def jitter_seconds(maximum: float) -> float:
+    return random.uniform(0.0, maximum)
+
+
+def sleep_seconds(delay: float) -> None:
+    time.sleep(delay)
+
+
+def is_rate_limit_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    return status_code == 429 or "429" in text or "too many requests" in text
 
 
 def validate_date_arg(
