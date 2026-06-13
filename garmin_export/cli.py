@@ -55,6 +55,7 @@ class ExportConfig:
     detail_delay_seconds: float
     detail_jitter_seconds: float
     skip_existing: bool
+    verbose: bool = False
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         detail_delay_seconds=args.detail_delay,
         detail_jitter_seconds=args.detail_jitter,
         skip_existing=not args.no_skip_existing,
+        verbose=args.verbose,
     )
 
     client = build_client()
@@ -160,6 +162,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Re-download activity files even when they already exist.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print timestamped progress while collecting and exporting activities.",
+    )
     args = parser.parse_args(argv)
 
     if args.page_size < 1:
@@ -201,24 +208,42 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     exported_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     files: list[str] = []
     skipped_existing_count = 0
+    verbose_log(config.verbose, f"Collecting activities for {date_range_label(config)}")
+    activities = collect_activities(client, config)
+    activity_total = len(activities)
+    verbose_log(config.verbose, f"Found {activity_total} activities")
 
-    for activity in collect_activities(client, config):
+    for index, activity in enumerate(activities, start=1):
         activity_id = extract_activity_id(activity)
         relative_file = Path("activities") / f"{activity_id}.json"
         output_file = config.output_dir / relative_file
+        progress = f"{index}/{activity_total}"
 
         if config.skip_existing and output_file.exists():
+            verbose_log(
+                config.verbose,
+                f"{progress} skip existing activity {activity_id}",
+            )
             files.append(relative_file.as_posix())
             skipped_existing_count += 1
             continue
 
         payload: dict[str, Any] = {"summary": activity}
+        verbose_log(config.verbose, f"{progress} export activity {activity_id}")
 
         if config.include_details:
             throttle_before_detail(config)
+            verbose_log(
+                config.verbose,
+                f"{progress} fetch activity payload {activity_id}",
+            )
             try:
                 payload["activity"] = client.get_activity(activity_id)
                 throttle_before_detail(config)
+                verbose_log(
+                    config.verbose,
+                    f"{progress} fetch activity details {activity_id}",
+                )
                 payload["details"] = client.get_activity_details(activity_id)
             except Exception as exc:
                 if is_rate_limit_error(exc):
@@ -231,6 +256,7 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
                 raise
 
         write_json(output_file, payload)
+        verbose_log(config.verbose, f"{progress} wrote {relative_file.as_posix()}")
         files.append(relative_file.as_posix())
 
     manifest = ExportResult(
@@ -309,6 +335,21 @@ def is_rate_limit_error(exc: Exception) -> bool:
     return status_code == 429 or "429" in text or "too many requests" in text
 
 
+def date_range_label(config: ExportConfig) -> str:
+    if config.start_date and config.end_date:
+        return f"{config.start_date} to {config.end_date}"
+    if config.start_date:
+        return f"from {config.start_date}"
+    return "all available dates"
+
+
+def verbose_log(enabled: bool, message: str) -> None:
+    if not enabled:
+        return
+    timestamp = datetime.now().astimezone().replace(microsecond=0).isoformat()
+    print(f"[{timestamp}] {message}", flush=True)
+
+
 def validate_date_arg(
     parser: argparse.ArgumentParser, argument_name: str, value: str | None
 ) -> None:
@@ -321,9 +362,14 @@ def validate_date_arg(
 
 
 def write_json(path: Path, payload: Any) -> None:
-    with path.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2, sort_keys=True, ensure_ascii=False)
-        file.write("\n")
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    try:
+        with temporary_path.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, indent=2, sort_keys=True, ensure_ascii=False)
+            file.write("\n")
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def load_local_env(path: Path, allowed_keys: set[str] | None = None) -> None:

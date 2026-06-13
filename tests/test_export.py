@@ -15,6 +15,7 @@ from garmin_export.cli import (
     ExportConfig,
     build_client,
     collect_activities,
+    date_range_label,
     export_activities,
     extract_activity_id,
     is_rate_limit_error,
@@ -25,6 +26,15 @@ from garmin_export.cli import (
     throttle_before_detail,
     validate_date_arg,
     write_json,
+)
+from garmin_export.year_range import (
+    YearRangeConfig,
+    export_config_for_year,
+    export_year_range,
+    years_inclusive,
+)
+from garmin_export.year_range import (
+    parse_args as parse_year_range_args,
 )
 
 
@@ -252,6 +262,7 @@ def test_write_json_writes_sorted_pretty_json(tmp_path: Path) -> None:
     write_json(output, {"z": 1, "a": 2})
 
     assert output.read_text(encoding="utf-8") == '{\n  "a": 2,\n  "z": 1\n}\n'
+    assert not (tmp_path / ".payload.json.tmp").exists()
 
 
 def test_export_skips_existing_activity_files_by_default(tmp_path: Path) -> None:
@@ -390,3 +401,122 @@ def test_main_exports_with_built_client(
     assert exit_code == 0
     assert "Exported 3 activities" in output
     assert (tmp_path / "manifest.json").exists()
+
+
+def test_export_verbose_logs_progress(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    config = ExportConfig(
+        output_dir=tmp_path,
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        start_date="2025-01-01",
+        end_date="2025-12-31",
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+        verbose=True,
+    )
+
+    export_activities(FakeClient(), config)
+
+    output = capsys.readouterr().out
+    assert "Collecting activities for 2025-01-01 to 2025-12-31" in output
+    assert "Found 1 activities" in output
+    assert "1/1 export activity 201" in output
+    assert "1/1 wrote activities/201.json" in output
+
+
+def test_date_range_label_describes_config() -> None:
+    config = ExportConfig(
+        output_dir=Path("unused"),
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+    )
+
+    assert date_range_label(config) == "all available dates"
+
+
+def test_years_inclusive_supports_descending_and_ascending_ranges() -> None:
+    assert years_inclusive(2025, 2017) == (
+        2025,
+        2024,
+        2023,
+        2022,
+        2021,
+        2020,
+        2019,
+        2018,
+        2017,
+    )
+    assert years_inclusive(2024, 2026) == (2024, 2025, 2026)
+
+
+def test_year_range_args_default_to_2025_through_2017() -> None:
+    config = parse_year_range_args(["--verbose"])
+
+    assert config.start_year == 2025
+    assert config.end_year == 2017
+    assert config.output_root == Path("data/garmin")
+    assert config.detail_delay_seconds == 2.0
+    assert config.detail_jitter_seconds == 2.0
+    assert config.verbose is True
+
+
+def test_export_config_for_year_uses_resumable_activity_directory(
+    tmp_path: Path,
+) -> None:
+    config = YearRangeConfig(
+        start_year=2025,
+        end_year=2025,
+        output_root=tmp_path,
+        page_size=50,
+        include_details=True,
+        activity_type="running",
+        tokenstore=None,
+        detail_delay_seconds=2.0,
+        detail_jitter_seconds=2.0,
+        verbose=True,
+    )
+
+    year_config = export_config_for_year(config, 2025)
+
+    assert year_config.output_dir == tmp_path / "activities-2025"
+    assert year_config.start_date == "2025-01-01"
+    assert year_config.end_date == "2025-12-31"
+    assert year_config.skip_existing is True
+    assert year_config.verbose is True
+
+
+def test_export_year_range_writes_each_year_directory(tmp_path: Path) -> None:
+    client = FakeClient()
+    config = YearRangeConfig(
+        start_year=2025,
+        end_year=2024,
+        output_root=tmp_path,
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+    )
+
+    results = export_year_range(client, config)
+
+    assert [Path(result.output_dir).name for result in results] == [
+        "activities-2025",
+        "activities-2024",
+    ]
+    assert (tmp_path / "activities-2025" / "activities" / "201.json").exists()
+    assert (tmp_path / "activities-2024" / "activities" / "201.json").exists()

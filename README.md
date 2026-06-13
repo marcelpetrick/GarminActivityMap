@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.15`
+- Version: `0.0.18`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -61,6 +61,41 @@ python -m garmin_export \
   --detail-delay 5 \
   --detail-jitter 5
 ```
+
+To export full years from 2025 back through 2017 into separate ignored folders,
+enter the Garmin password once at startup and run:
+
+```bash
+./exportGarminYears.sh
+```
+
+The script writes to `data/garmin/activities-YYYY/` folders, uses
+`--detail-delay 2`, `--detail-jitter 2`, and `--verbose`, and accepts extra
+exporter flags at the end. For example, `./exportGarminYears.sh --no-details`
+exports summaries only.
+
+Year export layout:
+
+```text
+data/
+  garmin/
+    activities-2025/
+      manifest.json
+      activities/
+        123456789.json
+    activities-2024/
+      manifest.json
+      activities/
+        987654321.json
+```
+
+The unique activity file key is Garmin's activity id from `activityId`,
+`activity_id`, or `id`. Existing `activities/<activity-id>.json` files are
+skipped by default, so interrupted year exports can be rerun without
+overwriting already downloaded activity payloads. Each year-level
+`manifest.json` is regenerated to summarize the latest run. Activity and
+manifest JSON files are written through a temporary file and atomically moved
+into place, which avoids keeping partial files after an interrupted write.
 
 ## Visualize
 

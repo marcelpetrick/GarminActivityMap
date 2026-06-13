@@ -32,6 +32,7 @@ bootstrap() {
 
 lint() {
   . .venv/bin/activate
+  bash -n localPipeline.sh exportGarminYears.sh
   python -m ruff check .
 }
 
@@ -63,6 +64,7 @@ run_smoke() {
   export QT_QPA_PLATFORM=offscreen
   export ACTIVITY_MAP_DISABLE_TILES=1
   python -m garmin_export --help >/dev/null
+  ./exportGarminYears.sh --help >/dev/null
   python -m activity_map --smoke-test >/dev/null
 }
 
