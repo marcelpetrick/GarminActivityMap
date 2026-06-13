@@ -15,6 +15,7 @@ from garmin_export.cli import (
     ExportConfig,
     build_client,
     collect_activities,
+    collect_activities_by_date,
     date_range_label,
     export_activities,
     extract_activity_id,
@@ -22,6 +23,7 @@ from garmin_export.cli import (
     iter_activities,
     load_local_env,
     main,
+    month_ranges,
     parse_args,
     throttle_before_detail,
     validate_date_arg,
@@ -41,6 +43,7 @@ from garmin_export.year_range import (
 class FakeClient:
     def __init__(self) -> None:
         self.detail_calls: list[tuple[str, str]] = []
+        self.date_calls: list[tuple[str, str | None, str | None]] = []
 
     def login(self, tokenstore: str | None = None) -> None:
         return None
@@ -62,6 +65,7 @@ class FakeClient:
         activitytype: str | None = None,
         sortorder: str | None = None,
     ) -> list[dict[str, Any]]:
+        self.date_calls.append((startdate, enddate, activitytype))
         return [
             {
                 "activityId": 201,
@@ -121,7 +125,7 @@ def test_collect_activities_uses_date_range_when_start_date_is_set() -> None:
         include_details=True,
         activity_type="cycling",
         start_date="2026-05-13",
-        end_date="2026-06-13",
+        end_date="2026-05-31",
         tokenstore=None,
         detail_delay_seconds=0,
         detail_jitter_seconds=0,
@@ -134,9 +138,55 @@ def test_collect_activities_uses_date_range_when_start_date_is_set() -> None:
         {
             "activityId": 201,
             "startDate": "2026-05-13",
-            "endDate": "2026-06-13",
+            "endDate": "2026-05-31",
             "activityType": "cycling",
         }
+    ]
+    assert client.date_calls == [("2026-05-13", "2026-05-31", "cycling")]
+
+
+def test_month_ranges_split_date_export_into_calendar_windows() -> None:
+    assert month_ranges("2025-01-15", "2025-03-02") == (
+        ("2025-01-15", "2025-01-31"),
+        ("2025-02-01", "2025-02-28"),
+        ("2025-03-01", "2025-03-02"),
+    )
+
+
+def test_collect_activities_by_date_deduplicates_chunk_boundaries() -> None:
+    class ChunkedClient(FakeClient):
+        def get_activities_by_date(
+            self,
+            startdate: str,
+            enddate: str | None = None,
+            activitytype: str | None = None,
+            sortorder: str | None = None,
+        ) -> list[dict[str, Any]]:
+            self.date_calls.append((startdate, enddate, activitytype))
+            if startdate == "2025-01-01":
+                return [{"activityId": 1}, {"activityId": 2}]
+            return [{"activityId": 2}, {"activityId": 3}]
+
+    client = ChunkedClient()
+    config = ExportConfig(
+        output_dir=Path("unused"),
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        start_date="2025-01-01",
+        end_date="2025-02-28",
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+    )
+
+    activities = collect_activities_by_date(client, config)
+
+    assert [activity["activityId"] for activity in activities] == [1, 2, 3]
+    assert client.date_calls == [
+        ("2025-01-01", "2025-01-31", None),
+        ("2025-02-01", "2025-02-28", None),
     ]
 
 

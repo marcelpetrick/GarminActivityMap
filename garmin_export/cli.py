@@ -8,7 +8,7 @@ import random
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -278,13 +278,69 @@ def collect_activities(
     client: GarminClient, config: ExportConfig
 ) -> list[dict[str, Any]]:
     if config.start_date:
+        return collect_activities_by_date(client, config)
+
+    return iter_activities(client, config.page_size, config.activity_type)
+
+
+def collect_activities_by_date(
+    client: GarminClient,
+    config: ExportConfig,
+) -> list[dict[str, Any]]:
+    if config.start_date is None:
+        return []
+
+    if config.end_date is None:
         return client.get_activities_by_date(
             startdate=config.start_date,
-            enddate=config.end_date,
             activitytype=config.activity_type,
         )
 
-    return iter_activities(client, config.page_size, config.activity_type)
+    activities_by_id: dict[str, dict[str, Any]] = {}
+    for start_date, end_date in month_ranges(config.start_date, config.end_date):
+        verbose_log(
+            config.verbose,
+            f"Collecting date window {start_date} to {end_date}",
+        )
+        activities = client.get_activities_by_date(
+            startdate=start_date,
+            enddate=end_date,
+            activitytype=config.activity_type,
+        )
+        verbose_log(
+            config.verbose,
+            f"Found {len(activities)} activities in {start_date} to {end_date}",
+        )
+        for activity in activities:
+            activities_by_id.setdefault(extract_activity_id(activity), activity)
+
+    return list(activities_by_id.values())
+
+
+def month_ranges(start_date: str, end_date: str) -> tuple[tuple[str, str], ...]:
+    start = parse_iso_date(start_date)
+    end = parse_iso_date(end_date)
+    if end < start:
+        raise ValueError("end_date must not be before start_date")
+
+    ranges: list[tuple[str, str]] = []
+    current = start
+    while current <= end:
+        next_month = first_day_of_next_month(current)
+        window_end = min(next_month - timedelta(days=1), end)
+        ranges.append((current.isoformat(), window_end.isoformat()))
+        current = window_end + timedelta(days=1)
+    return tuple(ranges)
+
+
+def parse_iso_date(value: str) -> date:
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def first_day_of_next_month(value: date) -> date:
+    if value.month == 12:
+        return date(value.year + 1, 1, 1)
+    return date(value.year, value.month + 1, 1)
 
 
 def iter_activities(

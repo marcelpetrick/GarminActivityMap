@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.18`
+- Version: `0.0.19`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -96,6 +96,9 @@ overwriting already downloaded activity payloads. Each year-level
 `manifest.json` is regenerated to summarize the latest run. Activity and
 manifest JSON files are written through a temporary file and atomically moved
 into place, which avoids keeping partial files after an interrupted write.
+Date-based exports are split into calendar-month Garmin queries and then
+deduplicated by activity id, which avoids relying on a single full-year query
+that may be capped by Garmin.
 
 ## Visualize
 
