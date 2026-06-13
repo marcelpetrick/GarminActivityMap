@@ -99,6 +99,11 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Keep provider tile requests capped to the supported tile zoom and scale cached tiles beyond that point.
    - Add regression tests for deep viewport zoom and tile-request capping.
 
+11. UI version display [done]
+   - Show the application version after the app name in the window title.
+   - Keep the map tile request identity aligned with the application version.
+   - Add a GUI regression test for the title text.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.

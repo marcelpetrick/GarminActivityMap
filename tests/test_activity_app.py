@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from pytestqt.qtbot import QtBot
 
+from activity_map import __version__
 from activity_map.app import main, parse_args
 from activity_map.widgets import MainWindow
 
@@ -40,6 +41,13 @@ def test_parse_args_accepts_directory_and_smoke_flag(tmp_path: Path) -> None:
 
     assert args.directory == tmp_path
     assert args.smoke_test is True
+
+
+def test_main_window_title_includes_version(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert window.windowTitle() == f"Garmin Activity Map {__version__}"
 
 
 def test_main_window_loads_directory_and_renders_nonblank_map(

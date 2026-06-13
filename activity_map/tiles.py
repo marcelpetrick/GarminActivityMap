@@ -8,11 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from . import __version__
 from .geo import ProjectedPoint, ScreenPoint, Viewport
 
 OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 OSM_ATTRIBUTION = "Map data (c) OpenStreetMap contributors"
-OSM_USER_AGENT = "GarminVisualizeAllActivities/0.0.13 (contact: mail@marcelpetrick.it)"
+OSM_USER_AGENT = (
+    f"GarminVisualizeAllActivities/{__version__} (contact: mail@marcelpetrick.it)"
+)
 TILE_SIZE = 256
 MIN_TILE_ZOOM = 0
 MAX_TILE_ZOOM = 18

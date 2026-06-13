@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .geo import (
     ScreenPoint,
     Viewport,
@@ -347,7 +348,7 @@ class MapCanvas(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Garmin Activity Map")
+        self.setWindowTitle(f"Garmin Activity Map {__version__}")
         self.resize(1200, 760)
         self.report: LoadReport | None = None
 
