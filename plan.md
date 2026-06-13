@@ -117,6 +117,12 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Add a bottom-right distance scale for 1 km, 2 km, and 5 km.
    - Cover track segmentation and scale math with tests.
 
+14. Track color and scale controls [done]
+   - Add a left-panel color picker for the shared activity track color.
+   - Replace the multi-row distance scale with one bottom-right scale bar.
+   - Snap scale labels to 1/2/5-style kilometer distances.
+   - Cover scale selection and track color updates with tests.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.

@@ -121,7 +121,51 @@ def pixels_for_ground_distance(
     return meters / meters_per_world * zoom
 
 
-def scale_bar_widths(
+def choose_scale_bar(
+    latitude: float,
+    zoom: float,
+    target_width: float,
+    max_width: float,
+) -> tuple[float, float]:
+    candidates = nice_scale_distances_meters()
+    candidate_widths = tuple(
+        (
+            distance,
+            pixels_for_ground_distance(distance, latitude, zoom),
+        )
+        for distance in candidates
+    )
+    fitting = [
+        (distance, width)
+        for distance, width in candidate_widths
+        if width <= max_width
+    ]
+    if fitting:
+        return min(fitting, key=lambda item: abs(item[1] - target_width))
+
+    distance, width = min(
+        candidate_widths,
+        key=lambda item: abs(item[1] - target_width),
+    )
+    return distance, min(width, max_width)
+
+
+def nice_scale_distances_meters() -> tuple[float, ...]:
+    distances: list[float] = []
+    for exponent in range(-1, 8):
+        multiplier = 10.0**exponent
+        distances.extend(value * multiplier * 1_000.0 for value in (1.0, 2.0, 5.0))
+    return tuple(distances)
+
+
+def format_scale_distance(distance_meters: float) -> str:
+    kilometers = distance_meters / 1_000.0
+    if kilometers >= 10:
+        return f"{kilometers:,.0f} km"
+    return f"{kilometers:g} km"
+
+
+def scale_bar_widths_for_distances(
     distances_meters: Iterable[float],
     latitude: float,
     zoom: float,

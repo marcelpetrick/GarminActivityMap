@@ -86,16 +86,17 @@ Controls:
 
 - Open Directory: choose a folder containing exported Garmin JSON files.
 - Reset View: fit the visible map back to the loaded tracks.
+- Track Color: choose one shared color for all rendered activity tracks.
 - Track Opacity: make individual routes lighter or stronger.
 - Heat Intensity: tune the density overlay.
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks and heat visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
-- The bottom-right scale shows approximate 1 km, 2 km, and 5 km distances for the current map latitude and zoom.
+- The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 
 Map colors:
 
-- Cyan lines are activity tracks.
+- The selected track color is used for all activity tracks.
 - Pink/red dots are heat-density cells, not extra activities. Larger or stronger dots mean more GPS points were aggregated in that area.
 
 See `documents/heatmap.md` for how the heatmap is calculated and which Garmin fields feed it.

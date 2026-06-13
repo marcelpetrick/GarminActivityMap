@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import pytest
+from PyQt6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
 from activity_map import __version__
@@ -89,6 +90,17 @@ def test_main_window_updates_map_layer_controls(qtbot: QtBot) -> None:
     window.canvas.set_tile_opacity(0)
 
     assert window.canvas.tile_opacity == 0.0
+
+
+def test_main_window_updates_track_color(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.canvas.set_track_color(QColor("#ff00aa"))
+    window.update_track_color_button()
+
+    assert window.canvas.track_color.name() == "#ff00aa"
+    assert "#ff00aa" in window.track_color_button.styleSheet()
 
 
 def test_main_smoke_test_returns_success(

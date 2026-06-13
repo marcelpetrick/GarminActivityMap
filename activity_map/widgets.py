@@ -20,6 +20,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -35,11 +36,12 @@ from . import __version__
 from .geo import (
     ScreenPoint,
     Viewport,
+    choose_scale_bar,
     coordinate_bounds,
     fit_viewport,
+    format_scale_distance,
     latitude_from_projected_y,
     project_point,
-    scale_bar_widths,
 )
 from .heat import HeatCell, build_heat_grid
 from .loader import load_directory
@@ -63,7 +65,6 @@ HEAT = QColor(255, 70, 145, 110)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
 HEAT_CELL_SIZE = 0.006
-SCALE_BAR_DISTANCES_METERS = (1_000.0, 2_000.0, 5_000.0)
 
 
 class TileSignals(QObject):
@@ -80,6 +81,7 @@ class MapCanvas(QWidget):
         self.heat_cells: tuple[HeatCell, ...] = ()
         self.render_heat_cells: tuple[RenderHeatCell, ...] = ()
         self.viewport = fit_viewport(None, 960, 540)
+        self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
         self.heat_intensity = 0.70
         self.tile_opacity = 0.82
@@ -109,6 +111,12 @@ class MapCanvas(QWidget):
 
     def set_track_opacity(self, value: int) -> None:
         self.track_opacity = value / 100.0
+        self.update()
+
+    def set_track_color(self, color: QColor) -> None:
+        if not color.isValid():
+            return
+        self.track_color = QColor(color)
         self.update()
 
     def set_heat_intensity(self, value: int) -> None:
@@ -335,7 +343,7 @@ class MapCanvas(QWidget):
             return
         painter.save()
         for track in self.render_tracks:
-            color = QColor(TRACK)
+            color = QColor(self.track_color)
             color.setAlpha(int(210 * self.track_opacity))
             painter.setPen(QPen(color, 2.2, Qt.PenStyle.SolidLine))
             for segment in track.segments:
@@ -347,41 +355,37 @@ class MapCanvas(QWidget):
 
     def _draw_scale_bar(self, painter: QPainter) -> None:
         latitude = latitude_from_projected_y(self.viewport.center.y)
-        widths = scale_bar_widths(
-            SCALE_BAR_DISTANCES_METERS,
+        distance, width = choose_scale_bar(
             latitude,
             self.viewport.zoom,
+            target_width=max(self.width() * 0.18, 100.0),
             max_width=self.width() * 0.36,
         )
 
         margin = 18.0
-        row_gap = 18.0
         bottom = self.height() - margin - 8.0
         right = self.width() - margin
+        draw_width = max(width, 28.0)
+        left = right - draw_width
+        label = format_scale_distance(distance)
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         painter.setFont(QFont("Sans Serif", 9))
-        for index, (distance, width) in enumerate(reversed(widths)):
-            bar_width = max(20.0, width)
-            y = bottom - index * row_gap
-            left = right - bar_width
-            label = f"{int(distance / 1000)} km"
+        painter.setPen(QPen(QColor(8, 17, 31, 220), 5))
+        painter.drawLine(QPointF(left, bottom), QPointF(right, bottom))
+        painter.drawLine(QPointF(left, bottom - 8), QPointF(left, bottom + 1))
+        painter.drawLine(QPointF(right, bottom - 8), QPointF(right, bottom + 1))
 
-            painter.setPen(QPen(QColor(8, 17, 31, 220), 5))
-            painter.drawLine(QPointF(left, y), QPointF(right, y))
-            painter.drawLine(QPointF(left, y - 7), QPointF(left, y + 1))
-            painter.drawLine(QPointF(right, y - 7), QPointF(right, y + 1))
-
-            painter.setPen(QPen(QColor("#e8f1ff"), 2))
-            painter.drawLine(QPointF(left, y), QPointF(right, y))
-            painter.drawLine(QPointF(left, y - 7), QPointF(left, y + 1))
-            painter.drawLine(QPointF(right, y - 7), QPointF(right, y + 1))
-            painter.drawText(
-                QRectF(left - 50.0, y - 10.0, 44.0, 14.0),
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                label,
-            )
+        painter.setPen(QPen(QColor("#e8f1ff"), 2))
+        painter.drawLine(QPointF(left, bottom), QPointF(right, bottom))
+        painter.drawLine(QPointF(left, bottom - 8), QPointF(left, bottom + 1))
+        painter.drawLine(QPointF(right, bottom - 8), QPointF(right, bottom + 1))
+        painter.drawText(
+            QRectF(left, bottom - 25.0, draw_width, 16.0),
+            Qt.AlignmentFlag.AlignCenter,
+            label,
+        )
         painter.restore()
 
     def shutdown_tiles(self) -> None:
@@ -409,6 +413,10 @@ class MainWindow(QMainWindow):
         opacity_slider.setRange(0, 100)
         opacity_slider.setValue(72)
         opacity_slider.valueChanged.connect(self.canvas.set_track_opacity)
+
+        self.track_color_button = QPushButton("Track Color")
+        self.track_color_button.clicked.connect(self.choose_track_color)
+        self.update_track_color_button()
 
         heat_slider = QSlider(Qt.Orientation.Horizontal)
         heat_slider.setRange(0, 100)
@@ -441,6 +449,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(legend_row(HEAT, "Pink/red dots show heat density"))
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Track opacity"))
+        side_layout.addWidget(self.track_color_button)
         side_layout.addWidget(opacity_slider)
         side_layout.addWidget(field_label("Heat intensity"))
         side_layout.addWidget(heat_slider)
@@ -469,6 +478,22 @@ class MainWindow(QMainWindow):
         )
         if directory:
             self.load_path(Path(directory))
+
+    def choose_track_color(self) -> None:
+        color = QColorDialog.getColor(
+            self.canvas.track_color,
+            self,
+            "Choose track color",
+        )
+        if color.isValid():
+            self.canvas.set_track_color(color)
+            self.update_track_color_button()
+
+    def update_track_color_button(self) -> None:
+        color = self.canvas.track_color.name()
+        self.track_color_button.setStyleSheet(
+            f"background: {color}; color: #08111f; font-weight: 700;"
+        )
 
     def load_path(self, path: Path) -> None:
         self.report = load_directory(path)
