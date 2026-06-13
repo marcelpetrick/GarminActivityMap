@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a local PyQt desktop application that loads ignored Garmin JSON exports from a selected directory, extracts GPS tracks, and renders them on an interactive world map. The user must be able to pan, zoom, and visually inspect activity density without exposing private activity data to the repository.
+Build a local PyQt desktop application that loads ignored Garmin JSON exports from a selected directory, extracts GPS tracks, and renders them on an interactive world map. The user must be able to pan, zoom, and visually inspect activity tracks without exposing private activity data to the repository.
 
 ## Safety Principles
 
@@ -50,21 +50,20 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Skip invalid coordinates and report skipped files.
    - Unit test valid files, empty files, malformed JSON, missing tracks, and mixed valid/invalid points.
 
-3. Map math and heat aggregation [done]
+3. Map math and track geometry [done]
    - Implement coordinate bounds, world wrapping rules, Web Mercator projection, viewport transforms, and zoom scaling.
-   - Implement a deterministic heat grid from projected points.
-   - Unit test projection edge cases, bounds, pan/zoom transforms, and aggregation.
+   - Unit test projection edge cases, bounds, and pan/zoom transforms.
 
 4. Minimal runnable PyQt app [done]
    - Add exact pinned PyQt dependency after checking the latest stable release.
    - Add `python -m activity_map`.
    - Implement directory picker, file load summary, interactive map canvas, pan, wheel zoom, and reset view.
-   - Render a simple offline world background, tracks, and heat overlay.
+   - Render a simple offline world background and tracks.
    - Add GUI smoke tests that instantiate widgets in offscreen mode.
 
 5. Modern UI polish [done]
    - Implement the dark analysis workspace, left control rail, compact toolbar, and status badges.
-   - Add opacity and heat controls that update rendering without reloading files.
+   - Add opacity controls that update rendering without reloading files.
    - Add loading and warning states that stay readable on small and large windows.
    - Add visual regression smoke checks that render the map widget offscreen and verify it is non-empty.
    - Profile rendering with synthetic large-track fixtures and keep interaction responsive.
@@ -81,13 +80,13 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 
 8. Manual verification [done]
    - Run the app against the local private export directory.
-   - Verify pan, zoom, track rendering, heat rendering, malformed-file handling, and no tracked private files.
+   - Verify pan, zoom, track rendering, malformed-file handling, and no tracked private files.
    - Do not commit screenshots or generated map outputs from private data.
    - Verified with the ignored local export directory using count-only parser output and an offscreen GUI smoke load.
 
 9. OpenStreetMap base layer [done]
-   - Add OpenStreetMap tile rendering below heat and tracks.
-   - Add an in-app legend explaining track colors and pink/red heat-density dots.
+   - Add OpenStreetMap tile rendering below tracks.
+   - Add an in-app legend explaining track colors.
    - Load newly visible map tiles after pan and zoom.
    - Cache downloaded tiles under ignored local storage for faster repeat loads.
    - Add a base-layer opacity control so the map can sit quietly under the activity data.
@@ -123,7 +122,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Snap scale labels to 1/2/5-style kilometer distances.
    - Cover scale selection and track color updates with tests.
 
-15. Remove heatmap overlay [planned]
+15. Remove heatmap overlay [done]
    - Remove heatmap computation from the app load path.
    - Remove heatmap rendering, legend text, and heat intensity UI controls.
    - Keep the app focused on Garmin activity tracks only.

@@ -29,14 +29,14 @@
 - Keep PyQt widgets thin: they should delegate data loading and map math to pure Python helpers.
 - Use only synthetic GPS fixtures in tests.
 - The GUI must fail safely on malformed files by reporting skipped files instead of crashing.
-- The map view must support pan, wheel zoom, and visible track/heat rendering before a feature is considered runnable.
+- The map view must support pan, wheel zoom, and visible track rendering before a feature is considered runnable.
 - Map tile features must cache downloaded tiles under ignored local storage and keep tests deterministic by disabling live tile downloads.
 - PyQt tests must run with `QT_QPA_PLATFORM=offscreen` in the local pipeline.
 
 ## Quality Gates
 
 - Every commit must pass `./localPipeline.sh`.
-- Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and heat aggregation.
+- Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and render preparation.
 - Add GUI smoke tests where practical without requiring private Garmin data.
 - Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.
 - Keep C4-style architecture documentation valid through the documentation build step.

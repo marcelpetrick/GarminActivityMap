@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .geo import ProjectedPoint, haversine_distance_meters, project_point
-from .heat import HeatCell
 from .models import ActivityTrack
 
 
@@ -12,13 +11,6 @@ class RenderTrack:
     activity_id: str
     name: str
     segments: tuple[tuple[ProjectedPoint, ...], ...]
-
-
-@dataclass(frozen=True, slots=True)
-class RenderHeatCell:
-    center: ProjectedPoint
-    count: int
-    intensity: float
 
 
 MAX_CONTINUOUS_SEGMENT_METERS = 5_000.0
@@ -63,19 +55,3 @@ def split_projected_segments(
     if len(current) >= 2:
         segments.append(tuple(current))
     return tuple(segments)
-
-
-def prepare_heat_cells(
-    heat_cells: tuple[HeatCell, ...], cell_size: float
-) -> tuple[RenderHeatCell, ...]:
-    return tuple(
-        RenderHeatCell(
-            center=ProjectedPoint(
-                x=(cell.x_index + 0.5) * cell_size,
-                y=(cell.y_index + 0.5) * cell_size,
-            ),
-            count=cell.count,
-            intensity=cell.intensity,
-        )
-        for cell in heat_cells
-    )

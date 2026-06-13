@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.20`
+- Version: `0.0.21`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -106,7 +106,7 @@ that may be capped by Garmin.
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density over an OpenStreetMap base layer. Downloaded map tiles are cached under ignored `data/map_tiles/`; repeat views use the local cache, and panning or zooming automatically requests newly visible tiles.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under ignored `data/map_tiles/`; repeat views use the local cache, and panning or zooming automatically requests newly visible tiles.
 
 Expected local layout:
 
@@ -126,18 +126,14 @@ Controls:
 - Reset View: fit the visible map back to the loaded tracks.
 - Track Color: choose one shared color for all rendered activity tracks.
 - Track Opacity: make individual routes lighter or stronger.
-- Heat Intensity: tune the density overlay.
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
-- OpenStreetMap layer: toggle the map base layer while keeping tracks and heat visible.
+- OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 
 Map colors:
 
-- The selected track color is used for all activity tracks.
-- Pink/red dots are heat-density cells, not extra activities. Larger or stronger dots mean more GPS points were aggregated in that area.
-
-See `documents/heatmap.md` for how the heatmap is calculated and which Garmin fields feed it.
+The selected track color is used for all activity tracks.
 
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
 

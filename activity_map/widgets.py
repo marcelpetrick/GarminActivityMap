@@ -43,10 +43,9 @@ from .geo import (
     latitude_from_projected_y,
     project_point,
 )
-from .heat import HeatCell, build_heat_grid
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
-from .render import RenderHeatCell, RenderTrack, prepare_heat_cells, prepare_tracks
+from .render import RenderTrack, prepare_tracks
 from .tiles import (
     OSM_ATTRIBUTION,
     TileCache,
@@ -61,10 +60,8 @@ GRID = QColor(55, 85, 120, 90)
 GRID_MAJOR = QColor(78, 125, 170, 135)
 LAND = QColor(22, 45, 59, 180)
 TRACK = QColor(45, 220, 255, 150)
-HEAT = QColor(255, 70, 145, 110)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
-HEAT_CELL_SIZE = 0.006
 
 
 class TileSignals(QObject):
@@ -78,12 +75,9 @@ class MapCanvas(QWidget):
         self.setMouseTracking(True)
         self.tracks: tuple[ActivityTrack, ...] = ()
         self.render_tracks: tuple[RenderTrack, ...] = ()
-        self.heat_cells: tuple[HeatCell, ...] = ()
-        self.render_heat_cells: tuple[RenderHeatCell, ...] = ()
         self.viewport = fit_viewport(None, 960, 540)
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
-        self.heat_intensity = 0.70
         self.tile_opacity = 0.82
         self.tile_layer_enabled = os.environ.get("ACTIVITY_MAP_DISABLE_TILES") != "1"
         self.tile_cache = TileCache()
@@ -97,8 +91,6 @@ class MapCanvas(QWidget):
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
         self.tracks = tracks
         self.render_tracks = prepare_tracks(tracks)
-        self.heat_cells = build_heat_grid(all_points(tracks), cell_size=HEAT_CELL_SIZE)
-        self.render_heat_cells = prepare_heat_cells(self.heat_cells, HEAT_CELL_SIZE)
         self.reset_view()
 
     def reset_view(self) -> None:
@@ -117,10 +109,6 @@ class MapCanvas(QWidget):
         if not color.isValid():
             return
         self.track_color = QColor(color)
-        self.update()
-
-    def set_heat_intensity(self, value: int) -> None:
-        self.heat_intensity = value / 100.0
         self.update()
 
     def set_tile_layer_enabled(self, enabled: bool) -> None:
@@ -189,7 +177,6 @@ class MapCanvas(QWidget):
         painter.fillRect(self.rect(), gradient)
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
-        self._draw_heat(painter)
         self._draw_tracks(painter)
         self._draw_scale_bar(painter)
         self._draw_attribution(painter)
@@ -310,21 +297,6 @@ class MapCanvas(QWidget):
         self.pending_tiles.discard(coordinate)
         self.update()
 
-    def _draw_heat(self, painter: QPainter) -> None:
-        if not self.render_heat_cells or self.heat_intensity <= 0:
-            return
-        painter.save()
-        painter.setPen(Qt.PenStyle.NoPen)
-        for cell in self.render_heat_cells:
-            alpha = int(180 * cell.intensity * self.heat_intensity)
-            color = QColor(HEAT)
-            color.setAlpha(max(0, min(220, alpha)))
-            painter.setBrush(color)
-            size = max(2.0, min(18.0, self.viewport.zoom * HEAT_CELL_SIZE))
-            screen = self.viewport.world_to_screen(cell.center)
-            painter.drawEllipse(QPointF(screen.x, screen.y), size, size)
-        painter.restore()
-
     def _draw_attribution(self, painter: QPainter) -> None:
         if not self.tile_layer_enabled:
             return
@@ -418,11 +390,6 @@ class MainWindow(QMainWindow):
         self.track_color_button.clicked.connect(self.choose_track_color)
         self.update_track_color_button()
 
-        heat_slider = QSlider(Qt.Orientation.Horizontal)
-        heat_slider.setRange(0, 100)
-        heat_slider.setValue(70)
-        heat_slider.valueChanged.connect(self.canvas.set_heat_intensity)
-
         map_opacity_slider = QSlider(Qt.Orientation.Horizontal)
         map_opacity_slider.setRange(0, 100)
         map_opacity_slider.setValue(82)
@@ -439,20 +406,17 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(18, 18, 18, 18)
         side_layout.setSpacing(14)
         side_layout.addWidget(title_label("Activity Map"))
-        side_layout.addWidget(subtitle_label("Local Garmin heat explorer"))
+        side_layout.addWidget(subtitle_label("Local Garmin track explorer"))
         side_layout.addSpacing(10)
         side_layout.addWidget(choose_button)
         side_layout.addWidget(reset_button)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Legend"))
         side_layout.addWidget(legend_row(TRACK, "Activity track lines"))
-        side_layout.addWidget(legend_row(HEAT, "Pink/red dots show heat density"))
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(self.track_color_button)
         side_layout.addWidget(opacity_slider)
-        side_layout.addWidget(field_label("Heat intensity"))
-        side_layout.addWidget(heat_slider)
         side_layout.addWidget(field_label("Map opacity"))
         side_layout.addWidget(map_opacity_slider)
         side_layout.addWidget(map_layer_checkbox)

@@ -18,7 +18,6 @@ from activity_map.geo import (
     project_point,
     scale_bar_widths_for_distances,
 )
-from activity_map.heat import build_heat_grid
 from activity_map.models import TrackPoint
 
 
@@ -141,28 +140,3 @@ def test_distance_helpers_support_scale_bar_math() -> None:
     ) == pytest.approx((2_000.0, 2.0))
     assert format_scale_distance(2_000.0) == "2 km"
     assert format_scale_distance(500.0) == "0.5 km"
-
-
-def test_build_heat_grid_counts_and_normalizes_cells() -> None:
-    cells = build_heat_grid(
-        [
-            TrackPoint(latitude=0.0, longitude=0.0),
-            TrackPoint(latitude=0.0, longitude=0.0),
-            TrackPoint(latitude=10.0, longitude=10.0),
-        ],
-        cell_size=0.05,
-    )
-
-    assert len(cells) == 2
-    assert max(cell.count for cell in cells) == 2
-    assert max(cell.intensity for cell in cells) == 1.0
-    assert min(cell.intensity for cell in cells) == 0.5
-
-
-def test_build_heat_grid_rejects_invalid_cell_size() -> None:
-    with pytest.raises(ValueError, match="cell_size"):
-        build_heat_grid([TrackPoint(latitude=0.0, longitude=0.0)], cell_size=0.0)
-
-
-def test_build_heat_grid_returns_empty_tuple_for_no_points() -> None:
-    assert build_heat_grid([]) == ()

@@ -39,7 +39,7 @@ flowchart TB
 ```
 
 - Exporter CLI: `garmin_export`, responsible for Garmin login, activity pagination, detail retrieval, and JSON writing.
-- PyQt desktop GUI: `activity_map`, responsible for loading exports, parsing GPS tracks, projecting coordinates, aggregating heat, and rendering the interactive map.
+- PyQt desktop GUI: `activity_map`, responsible for loading exports, parsing GPS tracks, projecting coordinates, and rendering the interactive map.
 - Map tile cache: `activity_map.tiles`, responsible for choosing visible OpenStreetMap tiles, using a clear request identity, and caching downloaded base-map images under ignored local storage.
 - Documentation build: `scripts/build_docs.py`, responsible for validating required C4 sections and producing a local documentation bundle.
 - Quality pipeline: `localPipeline.sh`, responsible for bootstrap, linting, static analysis, docs build, package build, tests, and smoke runs.
@@ -51,7 +51,6 @@ flowchart LR
   loader[activity_map.loader]
   models[activity_map.models]
   geo[activity_map.geo]
-  heat[activity_map.heat]
   render[activity_map.render]
   tiles[activity_map.tiles]
   widgets[activity_map.widgets]
@@ -61,16 +60,13 @@ flowchart LR
   widgets --> loader
   loader --> models
   widgets --> geo
-  widgets --> heat
   widgets --> render
   widgets --> tiles
   render --> geo
-  heat --> models
 ```
 
 - `activity_map.loader` recursively reads Garmin JSON files and extracts usable GPS tracks while collecting warnings for malformed or coordinate-free files.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
-- `activity_map.heat` converts projected points into deterministic density cells.
 - `activity_map.render` prepares cached render data so painting can stay responsive on larger exports.
 - `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.
 - `activity_map.widgets` owns the PyQt window, controls, canvas drawing, and user interaction.
@@ -83,7 +79,7 @@ The code-level design keeps private-data handling and UI rendering separated:
 - Export credentials are accepted at runtime by `garmin_export.cli` and passwords are never read from files or environment variables.
 - Raw Garmin payloads stay under ignored local directories such as `data/` or `exports/`.
 - Downloaded map tiles stay under ignored `data/map_tiles/`.
-- Parser, projection, heat, and render-cache logic use typed pure Python objects so they can be unit tested without private data.
+- Parser, projection, and render-cache logic use typed pure Python objects so they can be unit tested without private data.
 - PyQt widgets consume already parsed models and render caches, keeping GUI smoke tests practical in offscreen mode.
 - Tests use synthetic GPS fixtures only.
 
@@ -103,7 +99,7 @@ sequenceDiagram
   E->>D: Write JSON files and manifest
   U->>M: Open ignored export directory
   M->>D: Load JSON files
-  M->>M: Parse, project, aggregate heat, cache render data
+  M->>M: Parse, project, cache render data
   M-->>U: Interactive offline map
 ```
 
