@@ -1,11 +1,17 @@
-# Garmin Activity Exporter
+# Garmin Activity Map
 
 A private-first archive tool for turning a Garmin Connect account into a local, reusable activity dataset. It pulls activity summaries and detail payloads into JSON files so future analysis, dashboards, and visualizations can work from your own disk instead of repeatedly touching the Garmin service.
 
+![](media/currentState.png)
+
 ## Project Information
 
-- Author: `mail@marcelpetrick.it`
-- License: GPLv3
+**Author: Marcel Petrick <mail@marcelpetrick.it>**
+
+**Note: projected is generated with AI.**
+
+**License: GPLv3 or later. See `LICENSE`.**
+
 - Version: `0.0.22`
 - Runtime: Python 3.11+
 
