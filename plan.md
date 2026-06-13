@@ -128,7 +128,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Keep the app focused on Garmin activity tracks only.
    - Update tests and documentation so no heatmap behavior is advertised as part of the GUI.
 
-16. Optional track name labels [planned]
+16. Optional track name labels [done]
    - Add a checkbox that toggles Garmin activity names on the map.
    - Draw each visible name in a tiny but readable font near the lower-left of its rendered track.
    - Keep labels off by default so dense maps stay clean.

@@ -55,3 +55,13 @@ def split_projected_segments(
     if len(current) >= 2:
         segments.append(tuple(current))
     return tuple(segments)
+
+
+def track_label_anchor(track: RenderTrack) -> ProjectedPoint | None:
+    points = [point for segment in track.segments for point in segment]
+    if not points:
+        return None
+    return ProjectedPoint(
+        x=min(point.x for point in points),
+        y=max(point.y for point in points),
+    )

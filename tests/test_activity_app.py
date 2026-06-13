@@ -103,6 +103,17 @@ def test_main_window_updates_track_color(qtbot: QtBot) -> None:
     assert "#ff00aa" in window.track_color_button.styleSheet()
 
 
+def test_main_window_toggles_track_names(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert window.canvas.track_names_visible is False
+
+    window.track_names_checkbox.setChecked(True)
+
+    assert window.canvas.track_names_visible is True
+
+
 def test_main_smoke_test_returns_success(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

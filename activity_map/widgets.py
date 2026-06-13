@@ -10,6 +10,7 @@ from PyQt6.QtGui import (
     QCloseEvent,
     QColor,
     QFont,
+    QFontMetrics,
     QLinearGradient,
     QMouseEvent,
     QPainter,
@@ -45,7 +46,7 @@ from .geo import (
 )
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
-from .render import RenderTrack, prepare_tracks
+from .render import RenderTrack, prepare_tracks, track_label_anchor
 from .tiles import (
     OSM_ATTRIBUTION,
     TileCache,
@@ -78,6 +79,7 @@ class MapCanvas(QWidget):
         self.viewport = fit_viewport(None, 960, 540)
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
+        self.track_names_visible = False
         self.tile_opacity = 0.82
         self.tile_layer_enabled = os.environ.get("ACTIVITY_MAP_DISABLE_TILES") != "1"
         self.tile_cache = TileCache()
@@ -109,6 +111,10 @@ class MapCanvas(QWidget):
         if not color.isValid():
             return
         self.track_color = QColor(color)
+        self.update()
+
+    def set_track_names_visible(self, visible: bool) -> None:
+        self.track_names_visible = visible
         self.update()
 
     def set_tile_layer_enabled(self, enabled: bool) -> None:
@@ -178,6 +184,7 @@ class MapCanvas(QWidget):
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
         self._draw_tracks(painter)
+        self._draw_track_names(painter)
         self._draw_scale_bar(painter)
         self._draw_attribution(painter)
 
@@ -325,6 +332,38 @@ class MapCanvas(QWidget):
                 )
         painter.restore()
 
+    def _draw_track_names(self, painter: QPainter) -> None:
+        if not self.track_names_visible or not self.render_tracks:
+            return
+        painter.save()
+        label_font = QFont("Sans Serif", 8)
+        painter.setFont(label_font)
+        metrics = QFontMetrics(label_font)
+        for track in self.render_tracks:
+            anchor = track_label_anchor(track)
+            if anchor is None:
+                continue
+            screen = self.viewport.world_to_screen(anchor)
+            text_rect = QRectF(screen.x + 4.0, screen.y - 18.0, 180.0, 16.0)
+            label = metrics.elidedText(
+                track.name,
+                Qt.TextElideMode.ElideRight,
+                int(text_rect.width()),
+            )
+            painter.setPen(QPen(QColor(8, 17, 31, 230), 3))
+            painter.drawText(
+                text_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                label,
+            )
+            painter.setPen(QColor("#f7fbff"))
+            painter.drawText(
+                text_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                label,
+            )
+        painter.restore()
+
     def _draw_scale_bar(self, painter: QPainter) -> None:
         latitude = latitude_from_projected_y(self.viewport.center.y)
         distance, width = choose_scale_bar(
@@ -386,6 +425,10 @@ class MainWindow(QMainWindow):
         opacity_slider.setValue(72)
         opacity_slider.valueChanged.connect(self.canvas.set_track_opacity)
 
+        self.track_names_checkbox = QCheckBox("Show track names")
+        self.track_names_checkbox.setChecked(False)
+        self.track_names_checkbox.toggled.connect(self.canvas.set_track_names_visible)
+
         self.track_color_button = QPushButton("Track Color")
         self.track_color_button.clicked.connect(self.choose_track_color)
         self.update_track_color_button()
@@ -417,6 +460,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(self.track_color_button)
         side_layout.addWidget(opacity_slider)
+        side_layout.addWidget(self.track_names_checkbox)
         side_layout.addWidget(field_label("Map opacity"))
         side_layout.addWidget(map_opacity_slider)
         side_layout.addWidget(map_layer_checkbox)

@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.21`
+- Version: `0.0.22`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -126,6 +126,7 @@ Controls:
 - Reset View: fit the visible map back to the loaded tracks.
 - Track Color: choose one shared color for all rendered activity tracks.
 - Track Opacity: make individual routes lighter or stronger.
+- Show track names: draw each Garmin activity name near its rendered track.
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.

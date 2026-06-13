@@ -5,6 +5,7 @@ from activity_map.models import ActivityTrack, TrackPoint
 from activity_map.render import (
     prepare_tracks,
     split_projected_segments,
+    track_label_anchor,
 )
 
 
@@ -65,3 +66,24 @@ def test_split_projected_segments_breaks_large_gps_jumps() -> None:
 
     assert len(segments) == 2
     assert all(len(segment) == 2 for segment in segments)
+
+
+def test_track_label_anchor_uses_lower_left_projected_track_corner() -> None:
+    track = ActivityTrack(
+        activity_id="label",
+        name="Morning Ride",
+        source_file=Path("label.json"),
+        points=(
+            TrackPoint(latitude=0.0, longitude=0.0),
+            TrackPoint(latitude=0.01, longitude=0.02),
+            TrackPoint(latitude=-0.01, longitude=0.01),
+        ),
+    )
+    prepared = prepare_tracks((track,))[0]
+
+    anchor = track_label_anchor(prepared)
+
+    assert anchor is not None
+    all_points = [point for segment in prepared.segments for point in segment]
+    assert anchor.x == min(point.x for point in all_points)
+    assert anchor.y == max(point.y for point in all_points)
