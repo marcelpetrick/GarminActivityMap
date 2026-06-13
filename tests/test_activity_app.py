@@ -73,6 +73,7 @@ def test_main_window_loads_directory_and_renders_nonblank_map(
         for y in range(0, image.height(), max(image.height() // 5, 1))
     }
     assert len(sampled_colors) > 1
+    assert window.canvas.render_tracks[0].segments
 
 
 def test_main_window_updates_map_layer_controls(qtbot: QtBot) -> None:

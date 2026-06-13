@@ -37,7 +37,9 @@ from .geo import (
     Viewport,
     coordinate_bounds,
     fit_viewport,
+    latitude_from_projected_y,
     project_point,
+    scale_bar_widths,
 )
 from .heat import HeatCell, build_heat_grid
 from .loader import load_directory
@@ -57,11 +59,11 @@ GRID = QColor(55, 85, 120, 90)
 GRID_MAJOR = QColor(78, 125, 170, 135)
 LAND = QColor(22, 45, 59, 180)
 TRACK = QColor(45, 220, 255, 150)
-TRACK_ALT = QColor(255, 195, 65, 130)
 HEAT = QColor(255, 70, 145, 110)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
 HEAT_CELL_SIZE = 0.006
+SCALE_BAR_DISTANCES_METERS = (1_000.0, 2_000.0, 5_000.0)
 
 
 class TileSignals(QObject):
@@ -181,6 +183,7 @@ class MapCanvas(QWidget):
         self._draw_tiles(painter)
         self._draw_heat(painter)
         self._draw_tracks(painter)
+        self._draw_scale_bar(painter)
         self._draw_attribution(painter)
 
     def render_to_pixmap(self) -> QPixmap:
@@ -331,13 +334,53 @@ class MapCanvas(QWidget):
         if not self.render_tracks or self.track_opacity <= 0:
             return
         painter.save()
-        for index, track in enumerate(self.render_tracks):
-            color = QColor(TRACK if index % 2 == 0 else TRACK_ALT)
+        for track in self.render_tracks:
+            color = QColor(TRACK)
             color.setAlpha(int(210 * self.track_opacity))
             painter.setPen(QPen(color, 2.2, Qt.PenStyle.SolidLine))
-            draw_polyline(
-                painter,
-                [self.viewport.world_to_screen(point) for point in track.points],
+            for segment in track.segments:
+                draw_polyline(
+                    painter,
+                    [self.viewport.world_to_screen(point) for point in segment],
+                )
+        painter.restore()
+
+    def _draw_scale_bar(self, painter: QPainter) -> None:
+        latitude = latitude_from_projected_y(self.viewport.center.y)
+        widths = scale_bar_widths(
+            SCALE_BAR_DISTANCES_METERS,
+            latitude,
+            self.viewport.zoom,
+            max_width=self.width() * 0.36,
+        )
+
+        margin = 18.0
+        row_gap = 18.0
+        bottom = self.height() - margin - 8.0
+        right = self.width() - margin
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setFont(QFont("Sans Serif", 9))
+        for index, (distance, width) in enumerate(reversed(widths)):
+            bar_width = max(20.0, width)
+            y = bottom - index * row_gap
+            left = right - bar_width
+            label = f"{int(distance / 1000)} km"
+
+            painter.setPen(QPen(QColor(8, 17, 31, 220), 5))
+            painter.drawLine(QPointF(left, y), QPointF(right, y))
+            painter.drawLine(QPointF(left, y - 7), QPointF(left, y + 1))
+            painter.drawLine(QPointF(right, y - 7), QPointF(right, y + 1))
+
+            painter.setPen(QPen(QColor("#e8f1ff"), 2))
+            painter.drawLine(QPointF(left, y), QPointF(right, y))
+            painter.drawLine(QPointF(left, y - 7), QPointF(left, y + 1))
+            painter.drawLine(QPointF(right, y - 7), QPointF(right, y + 1))
+            painter.drawText(
+                QRectF(left - 50.0, y - 10.0, 44.0, 14.0),
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                label,
             )
         painter.restore()
 
@@ -394,8 +437,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(reset_button)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Legend"))
-        side_layout.addWidget(legend_row(TRACK, "Track lines alternate cyan"))
-        side_layout.addWidget(legend_row(TRACK_ALT, "Track lines alternate amber"))
+        side_layout.addWidget(legend_row(TRACK, "Activity track lines"))
         side_layout.addWidget(legend_row(HEAT, "Pink/red dots show heat density"))
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Track opacity"))

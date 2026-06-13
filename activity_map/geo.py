@@ -9,6 +9,7 @@ from .models import TrackPoint
 WEB_MERCATOR_LAT_LIMIT = 85.05112878
 MIN_ZOOM = 128.0
 MAX_ZOOM = 1_000_000_000_000.0
+EARTH_CIRCUMFERENCE_METERS = 40_075_016.686
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +102,54 @@ def project_point(point: TrackPoint) -> ProjectedPoint:
         - math.log(math.tan(latitude_rad) + 1.0 / math.cos(latitude_rad)) / math.pi
     ) / 2.0
     return ProjectedPoint(x=clamp_world(x), y=clamp_world(y))
+
+
+def latitude_from_projected_y(y: float) -> float:
+    mercator = math.pi * (1.0 - 2.0 * clamp_world(y))
+    return math.degrees(math.atan(math.sinh(mercator)))
+
+
+def pixels_for_ground_distance(
+    meters: float,
+    latitude: float,
+    zoom: float,
+) -> float:
+    latitude_rad = math.radians(
+        clamp(latitude, -WEB_MERCATOR_LAT_LIMIT, WEB_MERCATOR_LAT_LIMIT)
+    )
+    meters_per_world = max(EARTH_CIRCUMFERENCE_METERS * math.cos(latitude_rad), 1.0)
+    return meters / meters_per_world * zoom
+
+
+def scale_bar_widths(
+    distances_meters: Iterable[float],
+    latitude: float,
+    zoom: float,
+    max_width: float,
+) -> tuple[tuple[float, float], ...]:
+    return tuple(
+        (
+            distance,
+            min(pixels_for_ground_distance(distance, latitude, zoom), max_width),
+        )
+        for distance in distances_meters
+    )
+
+
+def haversine_distance_meters(start: TrackPoint, end: TrackPoint) -> float:
+    start_lat = math.radians(start.latitude)
+    end_lat = math.radians(end.latitude)
+    delta_lat = end_lat - start_lat
+    delta_lon = math.radians(end.longitude - start.longitude)
+    haversine = (
+        math.sin(delta_lat / 2.0) ** 2
+        + math.cos(start_lat) * math.cos(end_lat) * math.sin(delta_lon / 2.0) ** 2
+    )
+    return (
+        6_371_000.0
+        * 2.0
+        * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
+    )
 
 
 def coordinate_bounds(points: Iterable[TrackPoint]) -> GeoBounds | None:

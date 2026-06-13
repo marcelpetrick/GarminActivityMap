@@ -110,6 +110,13 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Stop immediately on Garmin rate-limit responses instead of retrying aggressively.
    - Document a cautious 2026 export command.
 
+13. Track rendering clarity [done]
+   - Render all activity tracks with one consistent color.
+   - Avoid false straight lines caused by two-point summary-only tracks.
+   - Split rendered tracks when adjacent GPS points jump an unrealistic distance.
+   - Add a bottom-right distance scale for 1 km, 2 km, and 5 km.
+   - Cover track segmentation and scale math with tests.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.

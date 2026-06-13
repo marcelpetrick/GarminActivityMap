@@ -91,11 +91,14 @@ Controls:
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks and heat visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
+- The bottom-right scale shows approximate 1 km, 2 km, and 5 km distances for the current map latitude and zoom.
 
 Map colors:
 
-- Cyan and amber lines are activity tracks; the app alternates these colors so overlapping routes are easier to separate.
+- Cyan lines are activity tracks.
 - Pink/red dots are heat-density cells, not extra activities. Larger or stronger dots mean more GPS points were aggregated in that area.
+
+See `documents/heatmap.md` for how the heatmap is calculated and which Garmin fields feed it.
 
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
 

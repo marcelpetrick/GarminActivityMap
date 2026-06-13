@@ -9,8 +9,12 @@ from activity_map.geo import (
     clamp_zoom,
     coordinate_bounds,
     fit_viewport,
+    haversine_distance_meters,
+    latitude_from_projected_y,
     normalize_longitude,
+    pixels_for_ground_distance,
     project_point,
+    scale_bar_widths,
 )
 from activity_map.heat import build_heat_grid
 from activity_map.models import TrackPoint
@@ -21,6 +25,7 @@ def test_project_point_maps_zero_zero_to_world_center() -> None:
 
     assert projected.x == pytest.approx(0.5)
     assert projected.y == pytest.approx(0.5)
+    assert latitude_from_projected_y(projected.y) == pytest.approx(0.0)
 
 
 def test_project_point_clamps_latitude_and_normalizes_longitude() -> None:
@@ -103,6 +108,29 @@ def test_viewport_allows_deep_zoom_without_early_clamp() -> None:
 
     assert zoomed.zoom == pytest.approx(10_000_000_000.0)
     assert clamp_zoom(MAX_ZOOM * 10.0) == MAX_ZOOM
+
+
+def test_distance_helpers_support_scale_bar_math() -> None:
+    one_km_pixels = pixels_for_ground_distance(
+        meters=1_000.0,
+        latitude=0.0,
+        zoom=40_075.016686,
+    )
+
+    assert one_km_pixels == pytest.approx(1.0)
+    assert haversine_distance_meters(
+        TrackPoint(latitude=0.0, longitude=0.0),
+        TrackPoint(latitude=0.0, longitude=1.0),
+    ) == pytest.approx(111_195, rel=0.01)
+    scale_widths = scale_bar_widths(
+        distances_meters=(1_000.0, 2_000.0, 5_000.0),
+        latitude=0.0,
+        zoom=40_075.016686,
+        max_width=3.0,
+    )
+
+    assert [distance for distance, _ in scale_widths] == [1_000.0, 2_000.0, 5_000.0]
+    assert [width for _, width in scale_widths] == pytest.approx([1.0, 2.0, 3.0])
 
 
 def test_build_heat_grid_counts_and_normalizes_cells() -> None:
