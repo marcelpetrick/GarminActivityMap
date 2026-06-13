@@ -12,6 +12,7 @@ from activity_map.widgets import MainWindow
 @pytest.fixture(autouse=True)
 def offscreen_qt(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("ACTIVITY_MAP_DISABLE_TILES", "1")
 
 
 def write_activity(path: Path) -> None:

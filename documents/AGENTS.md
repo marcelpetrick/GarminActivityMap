@@ -30,6 +30,7 @@
 - Use only synthetic GPS fixtures in tests.
 - The GUI must fail safely on malformed files by reporting skipped files instead of crashing.
 - The map view must support pan, wheel zoom, and visible track/heat rendering before a feature is considered runnable.
+- Map tile features must cache downloaded tiles under ignored local storage and keep tests deterministic by disabling live tile downloads.
 - PyQt tests must run with `QT_QPA_PLATFORM=offscreen` in the local pipeline.
 
 ## Quality Gates
@@ -50,6 +51,7 @@
 ## Commits
 
 - Use conventional commit messages, for example `feat: add garmin activity exporter`.
+- Include a clear detail body for non-trivial commits, covering what changed and how it was verified.
 - Run the full local pipeline before every commit and fix failures before committing.
 - Commit each implementation step separately after the pipeline passes.
 - Do not mention the use of any assistant, automation tool, or model in commits, docs, comments, or release notes.

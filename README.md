@@ -6,7 +6,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 - Author: `mail@marcelpetrick.it`
 - License: GPLv3
-- Version: `0.0.11`
+- Version: `0.0.12`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -51,7 +51,7 @@ python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density on an offline world map. It does not download map tiles or send coordinates to a remote map provider.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders tracks plus heat density over an OpenStreetMap base layer. Downloaded map tiles are cached under ignored `data/map_tiles/`; repeat views use the local cache, and panning or zooming automatically requests newly visible tiles.
 
 Expected local layout:
 
@@ -71,6 +71,7 @@ Controls:
 - Reset View: fit the visible map back to the loaded tracks.
 - Track Opacity: make individual routes lighter or stronger.
 - Heat Intensity: tune the density overlay.
+- OpenStreetMap layer: toggle the map base layer while keeping tracks and heat visible.
 - Drag the map to pan, use the mouse wheel to zoom around the cursor, and double-click the map to reset.
 
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
@@ -85,6 +86,7 @@ Troubleshooting:
 
 - If the map opens but no tracks appear, check the warning count in the left rail. The selected files may not contain GPS coordinates.
 - If the GUI cannot start on a server or CI machine, use the offscreen smoke command above.
+- To force the synthetic offline background for deterministic checks, run with `ACTIVITY_MAP_DISABLE_TILES=1`.
 - Keep real activity directories under ignored paths such as `data/` or `exports/`; the repository uses synthetic fixtures for tests.
 
 ## Local Pipeline

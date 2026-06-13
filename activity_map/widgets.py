@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
+from PyQt6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
+    QCloseEvent,
     QColor,
+    QFont,
     QLinearGradient,
     QMouseEvent,
     QPainter,
@@ -14,6 +19,7 @@ from PyQt6.QtGui import (
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -36,6 +42,13 @@ from .heat import HeatCell, build_heat_grid
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
 from .render import RenderHeatCell, RenderTrack, prepare_heat_cells, prepare_tracks
+from .tiles import (
+    OSM_ATTRIBUTION,
+    TileCache,
+    TileCoordinate,
+    tile_bounds,
+    visible_tiles,
+)
 
 BACKGROUND = QColor("#08111f")
 PANEL = QColor("#101827")
@@ -50,6 +63,10 @@ MUTED = "#8da2bd"
 HEAT_CELL_SIZE = 0.006
 
 
+class TileSignals(QObject):
+    loaded = pyqtSignal(object, bytes)
+
+
 class MapCanvas(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -62,6 +79,13 @@ class MapCanvas(QWidget):
         self.viewport = fit_viewport(None, 960, 540)
         self.track_opacity = 0.72
         self.heat_intensity = 0.70
+        self.tile_layer_enabled = os.environ.get("ACTIVITY_MAP_DISABLE_TILES") != "1"
+        self.tile_cache = TileCache()
+        self.tile_pixmaps: dict[TileCoordinate, QPixmap] = {}
+        self.pending_tiles: set[TileCoordinate] = set()
+        self.tile_executor = ThreadPoolExecutor(max_workers=4)
+        self.tile_signals = TileSignals()
+        self.tile_signals.loaded.connect(self._store_tile)
         self._last_drag_pos: QPoint | None = None
 
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
@@ -85,6 +109,10 @@ class MapCanvas(QWidget):
 
     def set_heat_intensity(self, value: int) -> None:
         self.heat_intensity = value / 100.0
+        self.update()
+
+    def set_tile_layer_enabled(self, enabled: bool) -> None:
+        self.tile_layer_enabled = enabled
         self.update()
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
@@ -144,8 +172,10 @@ class MapCanvas(QWidget):
         gradient.setColorAt(1.0, QColor("#0d1f2c"))
         painter.fillRect(self.rect(), gradient)
         self._draw_backdrop(painter)
+        self._draw_tiles(painter)
         self._draw_heat(painter)
         self._draw_tracks(painter)
+        self._draw_attribution(painter)
 
     def render_to_pixmap(self) -> QPixmap:
         pixmap = QPixmap(self.size())
@@ -190,6 +220,78 @@ class MapCanvas(QWidget):
             )
         painter.restore()
 
+    def _draw_tiles(self, painter: QPainter) -> None:
+        if not self.tile_layer_enabled:
+            return
+        painter.save()
+        for coordinate in visible_tiles(self.viewport):
+            pixmap = self._tile_pixmap(coordinate)
+            if pixmap is None:
+                self._request_tile(coordinate)
+                continue
+            bounds = tile_bounds(coordinate)
+            top_left = self.viewport.world_to_screen(bounds.top_left)
+            bottom_right = self.viewport.world_to_screen(bounds.bottom_right)
+            painter.drawPixmap(
+                QRectF(
+                    QPointF(top_left.x, top_left.y),
+                    QPointF(bottom_right.x, bottom_right.y),
+                ).normalized(),
+                pixmap,
+                QRectF(pixmap.rect()),
+            )
+        painter.restore()
+
+    def _tile_pixmap(self, coordinate: TileCoordinate) -> QPixmap | None:
+        pixmap = self.tile_pixmaps.get(coordinate)
+        if pixmap is not None:
+            return pixmap
+        cached = self.tile_cache.load_cached_tile(coordinate)
+        if cached is None:
+            return None
+        loaded = QPixmap()
+        if not loaded.loadFromData(cached):
+            return None
+        self.tile_pixmaps[coordinate] = loaded
+        return loaded
+
+    def _request_tile(self, coordinate: TileCoordinate) -> None:
+        if coordinate in self.pending_tiles:
+            return
+        self.pending_tiles.add(coordinate)
+        future = self.tile_executor.submit(self.tile_cache.fetch_tile, coordinate)
+        future.add_done_callback(self._tile_result_callback(coordinate))
+
+    def _tile_result_callback(
+        self,
+        coordinate: TileCoordinate,
+    ) -> Callable[[Future[bytes | None]], None]:
+        def callback(future: Future[bytes | None]) -> None:
+            self._emit_tile_result(coordinate, future)
+
+        return callback
+
+    def _emit_tile_result(
+        self,
+        coordinate: TileCoordinate,
+        future: Future[bytes | None],
+    ) -> None:
+        try:
+            data = future.result()
+        except OSError:
+            data = None
+        if data is not None:
+            self.tile_signals.loaded.emit(coordinate, data)
+        else:
+            self.pending_tiles.discard(coordinate)
+
+    def _store_tile(self, coordinate: TileCoordinate, data: bytes) -> None:
+        pixmap = QPixmap()
+        if pixmap.loadFromData(data):
+            self.tile_pixmaps[coordinate] = pixmap
+        self.pending_tiles.discard(coordinate)
+        self.update()
+
     def _draw_heat(self, painter: QPainter) -> None:
         if not self.render_heat_cells or self.heat_intensity <= 0:
             return
@@ -205,6 +307,19 @@ class MapCanvas(QWidget):
             painter.drawEllipse(QPointF(screen.x, screen.y), size, size)
         painter.restore()
 
+    def _draw_attribution(self, painter: QPainter) -> None:
+        if not self.tile_layer_enabled:
+            return
+        painter.save()
+        painter.setFont(QFont("Sans Serif", 8))
+        painter.setPen(QColor(20, 28, 38, 210))
+        painter.drawText(
+            self.rect().adjusted(0, 0, -8, -8),
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+            OSM_ATTRIBUTION,
+        )
+        painter.restore()
+
     def _draw_tracks(self, painter: QPainter) -> None:
         if not self.render_tracks or self.track_opacity <= 0:
             return
@@ -218,6 +333,9 @@ class MapCanvas(QWidget):
                 [self.viewport.world_to_screen(point) for point in track.points],
             )
         painter.restore()
+
+    def shutdown_tiles(self) -> None:
+        self.tile_executor.shutdown(wait=False, cancel_futures=True)
 
 
 class MainWindow(QMainWindow):
@@ -247,6 +365,10 @@ class MainWindow(QMainWindow):
         heat_slider.setValue(70)
         heat_slider.valueChanged.connect(self.canvas.set_heat_intensity)
 
+        map_layer_checkbox = QCheckBox("OpenStreetMap layer")
+        map_layer_checkbox.setChecked(self.canvas.tile_layer_enabled)
+        map_layer_checkbox.toggled.connect(self.canvas.set_tile_layer_enabled)
+
         side_panel = QFrame()
         side_panel.setObjectName("sidePanel")
         side_panel.setFixedWidth(300)
@@ -263,6 +385,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(opacity_slider)
         side_layout.addWidget(field_label("Heat intensity"))
         side_layout.addWidget(heat_slider)
+        side_layout.addWidget(map_layer_checkbox)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Load status"))
         side_layout.addWidget(self.status_label)
@@ -300,6 +423,11 @@ class MainWindow(QMainWindow):
             )
         else:
             self.warning_label.setText("No warnings")
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:
+        self.canvas.shutdown_tiles()
+        if event is not None:
+            super().closeEvent(event)
 
 
 def all_points(tracks: tuple[ActivityTrack, ...]) -> tuple[TrackPoint, ...]:
@@ -390,5 +518,14 @@ QSlider::handle:horizontal {{
     width: 16px;
     margin: -5px 0;
     border-radius: 8px;
+}}
+QCheckBox {{
+    color: {TEXT};
+    font-size: 13px;
+    spacing: 8px;
+}}
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
 }}
 """

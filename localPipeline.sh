@@ -54,12 +54,14 @@ build() {
 test_suite() {
   . .venv/bin/activate
   export QT_QPA_PLATFORM=offscreen
+  export ACTIVITY_MAP_DISABLE_TILES=1
   python -m pytest
 }
 
 run_smoke() {
   . .venv/bin/activate
   export QT_QPA_PLATFORM=offscreen
+  export ACTIVITY_MAP_DISABLE_TILES=1
   python -m garmin_export --help >/dev/null
   python -m activity_map --smoke-test >/dev/null
 }

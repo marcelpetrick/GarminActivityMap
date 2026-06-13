@@ -85,11 +85,19 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Do not commit screenshots or generated map outputs from private data.
    - Verified with the ignored local export directory using count-only parser output and an offscreen GUI smoke load.
 
+9. OpenStreetMap base layer [done]
+   - Add OpenStreetMap tile rendering below heat and tracks.
+   - Load newly visible map tiles after pan and zoom.
+   - Cache downloaded tiles under ignored local storage for faster repeat loads.
+   - Keep tests and pipeline deterministic by disabling live tile downloads during automated checks.
+   - Document the map layer, cache location, and offline fallback.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.
 - Unit tests and coverage are enforced in the pipeline.
 - The GUI runs with `python -m activity_map`.
 - The app can load a directory of Garmin JSON files and render tracks plus heat density.
+- The map can render cached OpenStreetMap tiles as a base layer with tracks and heat painted on top.
 - Private Garmin data remains ignored and unstaged.
 - Each implementation step lands as a separate conventional commit with a patch version bump.
