@@ -435,7 +435,9 @@ class MainWindow(QMainWindow):
         reset_button.clicked.connect(self.canvas.reset_view)
 
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setObjectName("trackOpacitySlider")
         self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setMinimumHeight(24)
         self.opacity_slider.setValue(self.settings.track_opacity)
         self.opacity_slider.valueChanged.connect(self.set_track_opacity)
 
@@ -448,7 +450,9 @@ class MainWindow(QMainWindow):
         self.update_track_color_button()
 
         self.map_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.map_opacity_slider.setObjectName("mapOpacitySlider")
         self.map_opacity_slider.setRange(0, 100)
+        self.map_opacity_slider.setMinimumHeight(24)
         self.map_opacity_slider.setValue(self.settings.map_opacity)
         self.map_opacity_slider.valueChanged.connect(self.set_map_opacity)
 
@@ -469,10 +473,15 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(reset_button)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Legend"))
-        side_layout.addWidget(legend_row(TRACK, "Activity track lines"))
+        legend, self.track_legend_swatch = legend_row(
+            self.canvas.track_color,
+            "Activity track lines",
+        )
+        side_layout.addWidget(legend)
         side_layout.addSpacing(12)
-        side_layout.addWidget(field_label("Track opacity"))
+        side_layout.addWidget(field_label("Track color"))
         side_layout.addWidget(self.track_color_button)
+        side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(self.opacity_slider)
         side_layout.addWidget(self.track_names_checkbox)
         side_layout.addWidget(field_label("Map opacity"))
@@ -519,6 +528,8 @@ class MainWindow(QMainWindow):
         self.track_color_button.setStyleSheet(
             f"background: {color}; color: #08111f; font-weight: 700;"
         )
+        if hasattr(self, "track_legend_swatch"):
+            update_legend_swatch(self.track_legend_swatch, self.canvas.track_color)
 
     def load_path(self, path: Path) -> None:
         self.report = load_directory(path)
@@ -627,7 +638,7 @@ def field_label(text: str) -> QLabel:
     return label
 
 
-def legend_row(color: QColor, text: str) -> QWidget:
+def legend_row(color: QColor, text: str) -> tuple[QWidget, QFrame]:
     row = QWidget()
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -635,15 +646,19 @@ def legend_row(color: QColor, text: str) -> QWidget:
 
     swatch = QFrame()
     swatch.setFixedSize(14, 14)
-    swatch.setStyleSheet(
-        f"background: {color.name()}; border-radius: 7px; border: 1px solid #d7e8ff;"
-    )
+    update_legend_swatch(swatch, color)
 
     label = QLabel(text)
     label.setObjectName("legendLabel")
     layout.addWidget(swatch)
     layout.addWidget(label, 1)
-    return row
+    return row, swatch
+
+
+def update_legend_swatch(swatch: QFrame, color: QColor) -> None:
+    swatch.setStyleSheet(
+        f"background: {color.name()}; border-radius: 7px; border: 1px solid #d7e8ff;"
+    )
 
 
 APP_STYLES = f"""
@@ -696,7 +711,7 @@ QSlider::groove:horizontal {{
 QSlider::handle:horizontal {{
     background: #ffc342;
     width: 16px;
-    margin: -5px 0;
+    margin: -4px 0;
     border-radius: 8px;
 }}
 QCheckBox {{

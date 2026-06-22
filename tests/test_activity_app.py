@@ -105,6 +105,15 @@ def test_main_window_updates_track_color(qtbot: QtBot) -> None:
 
     assert window.canvas.track_color.name() == "#ff00aa"
     assert "#ff00aa" in window.track_color_button.styleSheet()
+    assert "#ff00aa" in window.track_legend_swatch.styleSheet()
+
+
+def test_side_panel_sliders_have_room_for_their_handles(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert window.opacity_slider.minimumHeight() == 24
+    assert window.map_opacity_slider.minimumHeight() == 24
 
 
 def test_main_window_toggles_track_names(qtbot: QtBot) -> None:
