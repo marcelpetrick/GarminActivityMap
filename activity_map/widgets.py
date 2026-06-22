@@ -46,7 +46,7 @@ from .geo import (
 )
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
-from .render import RenderTrack, prepare_tracks, track_label_anchor
+from .render import RenderTrack, geometry_for_zoom, prepare_tracks, track_label_anchor
 from .tiles import (
     OSM_ATTRIBUTION,
     TileCache,
@@ -325,11 +325,17 @@ class MapCanvas(QWidget):
             color = QColor(self.track_color)
             color.setAlpha(int(210 * self.track_opacity))
             painter.setPen(QPen(color, 2.2, Qt.PenStyle.SolidLine))
-            for segment in track.segments:
+            geometry = geometry_for_zoom(track, self.viewport.zoom)
+            for segment in geometry.polylines:
                 draw_polyline(
                     painter,
                     [self.viewport.world_to_screen(point) for point in segment],
                 )
+            painter.setBrush(color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            for marker in geometry.markers:
+                screen = self.viewport.world_to_screen(marker)
+                painter.drawEllipse(QPointF(screen.x, screen.y), 3.0, 3.0)
         painter.restore()
 
     def _draw_track_names(self, painter: QPainter) -> None:

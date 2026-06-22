@@ -3,7 +3,11 @@ from pathlib import Path
 from activity_map.geo import project_point
 from activity_map.models import ActivityTrack, TrackPoint, TrackSegment
 from activity_map.render import (
+    MARKER_MAX_ZOOM,
+    SIMPLIFIED_MAX_ZOOM,
+    geometry_for_zoom,
     prepare_tracks,
+    simplify_polyline,
     split_projected_segments,
     track_label_anchor,
 )
@@ -112,3 +116,40 @@ def test_split_projected_segments_breaks_flagged_speed_outlier() -> None:
 
     assert len(segments) == 2
     assert all(len(segment) == 2 for segment in segments)
+
+
+def test_zoom_aware_geometry_uses_markers_simplified_and_detailed_tracks() -> None:
+    track = ActivityTrack(
+        activity_id="zoom",
+        name="Zoom",
+        source_file=Path("zoom.json"),
+        points=tuple(
+            TrackPoint(latitude=52.0 + index * 0.0001, longitude=13.0 + index * 0.0001)
+            for index in range(20)
+        ),
+    )
+
+    prepared = prepare_tracks((track,))[0]
+    marker_geometry = geometry_for_zoom(prepared, MARKER_MAX_ZOOM)
+    simplified_geometry = geometry_for_zoom(prepared, SIMPLIFIED_MAX_ZOOM)
+    detailed_geometry = geometry_for_zoom(prepared, SIMPLIFIED_MAX_ZOOM + 1)
+
+    assert marker_geometry.markers == (prepared.marker,)
+    assert marker_geometry.polylines == ()
+    assert len(simplified_geometry.polylines[0]) < len(detailed_geometry.polylines[0])
+    assert detailed_geometry.polylines == prepared.segments
+
+
+def test_simplify_polyline_preserves_endpoints_and_significant_turns() -> None:
+    points = (
+        project_point(TrackPoint(0.0, 0.0)),
+        project_point(TrackPoint(0.0, 0.001)),
+        project_point(TrackPoint(0.01, 0.002)),
+        project_point(TrackPoint(0.0, 0.003)),
+    )
+
+    simplified = simplify_polyline(points, tolerance=0.000001)
+
+    assert simplified[0] == points[0]
+    assert simplified[-1] == points[-1]
+    assert points[2] in simplified

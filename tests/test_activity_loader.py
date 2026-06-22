@@ -2,12 +2,16 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from activity_map.loader import (
     extract_track_points,
     load_activity_file,
     load_directory,
     normalize_coordinate,
     parse_timestamp,
+    track_bounds,
+    track_duration_seconds,
     validate_segments,
 )
 from activity_map.models import TrackPoint
@@ -223,3 +227,59 @@ def test_parse_timestamp_supports_iso_and_epoch_milliseconds() -> None:
         1_750_579_200, tz=UTC
     )
     assert parse_timestamp("invalid") is None
+
+
+def test_loader_populates_altitude_distance_duration_and_bounds(
+    tmp_path: Path,
+) -> None:
+    activity_file = tmp_path / "model.json"
+    write_json(
+        activity_file,
+        {
+            "summary": {"activityId": 77},
+            "details": {
+                "geoPolylineDTO": {
+                    "polyline": [
+                        {
+                            "lat": 52.5,
+                            "lon": 13.4,
+                            "altitude": 40,
+                            "timestamp": "2026-06-22T08:00:00Z",
+                        },
+                        {
+                            "lat": 52.5001,
+                            "lon": 13.4001,
+                            "altitude": "42.5",
+                            "timestamp": "2026-06-22T08:01:00Z",
+                        },
+                    ]
+                }
+            },
+        },
+    )
+
+    track = load_activity_file(activity_file)
+
+    assert track is not None
+    assert track.points[0].altitude_meters == 40
+    assert track.points[1].altitude_meters == 42.5
+    assert track.total_distance_meters > 0
+    assert track.duration_seconds == 60
+    assert track.bounds is not None
+    assert track.bounds.width == pytest.approx(0.0001)
+    assert track.bounds.height == pytest.approx(0.0001)
+
+
+def test_track_aggregate_helpers_handle_missing_and_invalid_time() -> None:
+    points = (
+        TrackPoint(1.0, 2.0),
+        TrackPoint(3.0, 5.0),
+    )
+
+    bounds = track_bounds(points)
+
+    assert bounds is not None
+    assert bounds.width == 3.0
+    assert bounds.height == 2.0
+    assert track_duration_seconds(points) is None
+    assert track_bounds(()) is None

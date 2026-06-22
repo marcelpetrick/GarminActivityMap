@@ -12,7 +12,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.24`
+- Version: `0.0.25`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -150,6 +150,11 @@ When timestamps are available, the loader validates their ordering and computes
 geodesic segment speeds. Segments above 30 km/h are flagged and disconnected
 from rendered geometry to suppress GPS spikes; the source JSON is never changed.
 Use `load_directory(path, max_speed_kmh=...)` to configure the threshold.
+
+Loaded tracks retain timestamps and altitude where available, plus per-segment
+distance and speed, total distance, duration, and geographic bounds. Rendering
+uses cached markers at broad zoom, simplified polylines at intermediate zoom,
+and full validated geometry when zoomed in.
 
 For a headless smoke check:
 

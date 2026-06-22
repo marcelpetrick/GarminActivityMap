@@ -67,7 +67,7 @@ flowchart LR
 
 - `activity_map.loader` recursively reads Garmin JSON files, validates coordinates and timestamps, computes segment speed, and flags malformed, coordinate-free, or implausible geometry without changing source payloads.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
-- `activity_map.render` prepares cached render data so painting can stay responsive on larger exports.
+- `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
 - `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.
 - `activity_map.widgets` owns the PyQt window, controls, canvas drawing, and user interaction.
 - `activity_map.app` provides `python -m activity_map` and the non-interactive smoke entry point.

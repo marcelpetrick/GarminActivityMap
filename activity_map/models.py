@@ -10,6 +10,23 @@ class TrackPoint:
     latitude: float
     longitude: float
     timestamp: datetime | None = None
+    altitude_meters: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TrackBounds:
+    min_latitude: float
+    max_latitude: float
+    min_longitude: float
+    max_longitude: float
+
+    @property
+    def width(self) -> float:
+        return self.max_longitude - self.min_longitude
+
+    @property
+    def height(self) -> float:
+        return self.max_latitude - self.min_latitude
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +48,9 @@ class ActivityTrack:
     points: tuple[TrackPoint, ...]
     segments: tuple[TrackSegment, ...] = ()
     validation_messages: tuple[str, ...] = ()
+    total_distance_meters: float = 0.0
+    duration_seconds: float | None = None
+    bounds: TrackBounds | None = None
 
 
 @dataclass(frozen=True, slots=True)

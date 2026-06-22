@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from .geo import haversine_distance_meters
-from .models import ActivityTrack, LoadReport, LoadWarning, TrackPoint, TrackSegment
+from .models import (
+    ActivityTrack,
+    LoadReport,
+    LoadWarning,
+    TrackBounds,
+    TrackPoint,
+    TrackSegment,
+)
 
 LATITUDE_KEYS = frozenset(
     {
@@ -47,6 +54,10 @@ TIMESTAMP_KEYS = (
 )
 TIMESTAMP_METRIC_KEYS = frozenset(
     {"directTimestamp", "timestamp", "activityTimestamp"}
+)
+ALTITUDE_KEYS = ("altitude", "elevation", "altitudeMeters", "enhancedAltitude")
+ALTITUDE_METRIC_KEYS = frozenset(
+    {"directElevation", "enhancedElevation", "altitude", "elevation"}
 )
 DEFAULT_MAX_SEGMENT_SPEED_KMH = 30.0
 
@@ -110,6 +121,11 @@ def load_activity_file(
         points=points,
         segments=segments,
         validation_messages=validation_messages,
+        total_distance_meters=sum(
+            segment.distance_meters for segment in segments if segment.valid
+        ),
+        duration_seconds=track_duration_seconds(points),
+        bounds=track_bounds(points),
     )
 
 
@@ -145,6 +161,7 @@ def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
         latitude_index = find_metric_index(descriptors, LATITUDE_METRIC_KEYS)
         longitude_index = find_metric_index(descriptors, LONGITUDE_METRIC_KEYS)
         timestamp_index = find_metric_index(descriptors, TIMESTAMP_METRIC_KEYS)
+        altitude_index = find_metric_index(descriptors, ALTITUDE_METRIC_KEYS)
         if latitude_index is None or longitude_index is None:
             continue
 
@@ -160,6 +177,7 @@ def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
                     latitude_index,
                     longitude_index,
                     timestamp_index,
+                    altitude_index,
                 )
             )
     return points
@@ -191,6 +209,7 @@ def parse_metric_row(
     latitude_index: int,
     longitude_index: int,
     timestamp_index: int | None = None,
+    altitude_index: int | None = None,
 ) -> list[TrackPoint]:
     if latitude_index >= len(metrics) or longitude_index >= len(metrics):
         return []
@@ -199,10 +218,16 @@ def parse_metric_row(
         if timestamp_index is not None and timestamp_index < len(metrics)
         else None
     )
+    altitude = (
+        metrics[altitude_index]
+        if altitude_index is not None and altitude_index < len(metrics)
+        else None
+    )
     point = make_point(
         metrics[latitude_index],
         metrics[longitude_index],
         timestamp,
+        altitude,
     )
     return [] if point is None else [point]
 
@@ -212,13 +237,19 @@ def parse_coordinate_mapping(item: Mapping[str, Any]) -> TrackPoint | None:
     longitude = first_value_for_keys(item, LONGITUDE_KEYS)
     if latitude is None or longitude is None:
         return None
-    return make_point(latitude, longitude, first_value_for_keys(item, TIMESTAMP_KEYS))
+    return make_point(
+        latitude,
+        longitude,
+        first_value_for_keys(item, TIMESTAMP_KEYS),
+        first_value_for_keys(item, ALTITUDE_KEYS),
+    )
 
 
 def make_point(
     latitude_value: Any,
     longitude_value: Any,
     timestamp_value: Any = None,
+    altitude_value: Any = None,
 ) -> TrackPoint | None:
     latitude = normalize_coordinate(latitude_value, "latitude")
     longitude = normalize_coordinate(longitude_value, "longitude")
@@ -228,7 +259,18 @@ def make_point(
         latitude=latitude,
         longitude=longitude,
         timestamp=parse_timestamp(timestamp_value),
+        altitude_meters=parse_optional_float(altitude_value),
     )
+
+
+def parse_optional_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -301,6 +343,25 @@ def validate_segments(
             "because timestamps are missing"
         )
     return tuple(segments), tuple(messages)
+
+
+def track_duration_seconds(points: Sequence[TrackPoint]) -> float | None:
+    timestamps = [point.timestamp for point in points if point.timestamp is not None]
+    if len(timestamps) < 2:
+        return None
+    duration = (timestamps[-1] - timestamps[0]).total_seconds()
+    return duration if duration >= 0 else None
+
+
+def track_bounds(points: Sequence[TrackPoint]) -> TrackBounds | None:
+    if not points:
+        return None
+    return TrackBounds(
+        min_latitude=min(point.latitude for point in points),
+        max_latitude=max(point.latitude for point in points),
+        min_longitude=min(point.longitude for point in points),
+        max_longitude=max(point.longitude for point in points),
+    )
 
 
 def normalize_coordinate(value: Any, axis: str) -> float | None:
