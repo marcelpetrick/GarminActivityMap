@@ -12,7 +12,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.27`
+- Version: `0.0.29`
 - Runtime: Python 3.11+
 
 ## Usage Terms
