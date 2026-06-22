@@ -186,6 +186,18 @@ linting, strict typing, dead code, complexity, installed dependencies, package
 architecture, documentation, package builds, unit tests, coverage, and CLI/GUI
 smoke runs. It prints a per-gate summary and exits non-zero if any gate fails.
 
+Before a major automated operation, create a verified checkpoint and confirm
+the worktree is clean:
+
+```bash
+./localPipeline.sh
+git commit
+./scripts/agentPreflight.sh
+```
+
+The detailed incremental-change, rollback, and traceability rules are in
+`documents/AGENTS.md`.
+
 ## Architecture Documentation
 
 The C4-style architecture views live in `documents/architecture.md`. Build and validate the local documentation bundle with:

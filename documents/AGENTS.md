@@ -55,3 +55,24 @@
 - Run the full local pipeline before every commit and fix failures before committing.
 - Commit each implementation step separately after the pipeline passes.
 - Do not mention the use of any assistant, automation tool, or model in commits, docs, comments, or release notes.
+
+## Major Automated Actions
+
+Before cloud execution, remote generation, repository-wide refactoring,
+dependency upgrades, or architecture migrations:
+
+1. Inspect `git status --short --branch`.
+2. Complete and verify the current focused change.
+3. Commit it with a conventional message and verification detail.
+4. Run `./scripts/agentPreflight.sh`; proceed only when it reports a clean
+   repository checkpoint.
+
+Do not combine unrelated work packages in one commit. Record the work package
+and significant architectural decisions in the commit subject/body and update
+the relevant architecture or usage documentation. Prefer additive migrations
+and small reversible changes so `git revert`, `git bisect`, and incremental
+recovery remain practical.
+
+If a major action fails, preserve the failing evidence, return to the last clean
+checkpoint with a non-destructive recovery strategy, and resume in a new
+focused commit. Never discard unrelated user changes.

@@ -37,7 +37,7 @@ formatting() {
 
 lint() {
   . .venv/bin/activate
-  bash -n localPipeline.sh exportGarminYears.sh
+  bash -n localPipeline.sh exportGarminYears.sh scripts/agentPreflight.sh
   python -m ruff check .
 }
 
