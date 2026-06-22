@@ -2,6 +2,25 @@
 
 A private-first archive tool for turning a Garmin Connect account into a local, reusable activity dataset. It pulls activity summaries and detail payloads into JSON files so future analysis, dashboards, and visualizations can work from your own disk instead of repeatedly touching the Garmin service.
 
+## TL;DR
+
+After completing the setup below, export all activities from 2017 through 2026:
+
+```bash
+export GARMIN_EMAIL='garmin-user@example.com'
+./exportGarminYears.sh --start-year 2026 --end-year 2017
+```
+
+Enter your Garmin password and MFA code when prompted. The export is resumable,
+so the same command can be run again after an interruption.
+
+Open all exported years in the map:
+
+```bash
+source .venv/bin/activate
+python -m activity_map data/garmin
+```
+
 ![](media/currentState.png)
 
 ## Project Information
@@ -12,7 +31,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.29`
+- Version: `0.0.30`
 - Runtime: Python 3.11+
 
 ## Usage Terms
