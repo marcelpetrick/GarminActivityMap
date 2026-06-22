@@ -198,8 +198,7 @@ def test_load_local_env_ignores_password_values(
 ) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        'GARMIN_EMAIL="local@example.invalid"\n'
-        'GARMIN_PASSWORD="do-not-load"\n',
+        'GARMIN_EMAIL="local@example.invalid"\nGARMIN_PASSWORD="do-not-load"\n',
         encoding="utf-8",
     )
     monkeypatch.delenv("GARMIN_EMAIL", raising=False)

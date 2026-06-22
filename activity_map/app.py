@@ -45,8 +45,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--smoke-test",
         action="store_true",
         help=(
-            "Create the GUI in offscreen mode and exit without starting the "
-            "event loop."
+            "Create the GUI in offscreen mode and exit without starting the event loop."
         ),
     )
     return parser.parse_args(argv)

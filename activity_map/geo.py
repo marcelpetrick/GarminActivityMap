@@ -98,8 +98,7 @@ def project_point(point: TrackPoint) -> ProjectedPoint:
 
     x = (longitude + 180.0) / 360.0
     y = (
-        1.0
-        - math.log(math.tan(latitude_rad) + 1.0 / math.cos(latitude_rad)) / math.pi
+        1.0 - math.log(math.tan(latitude_rad) + 1.0 / math.cos(latitude_rad)) / math.pi
     ) / 2.0
     return ProjectedPoint(x=clamp_world(x), y=clamp_world(y))
 
@@ -136,9 +135,7 @@ def choose_scale_bar(
         for distance in candidates
     )
     fitting = [
-        (distance, width)
-        for distance, width in candidate_widths
-        if width <= max_width
+        (distance, width) for distance, width in candidate_widths if width <= max_width
     ]
     if fitting:
         return min(fitting, key=lambda item: abs(item[1] - target_width))
@@ -190,9 +187,7 @@ def haversine_distance_meters(start: TrackPoint, end: TrackPoint) -> float:
         + math.cos(start_lat) * math.cos(end_lat) * math.sin(delta_lon / 2.0) ** 2
     )
     return (
-        6_371_000.0
-        * 2.0
-        * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
+        6_371_000.0 * 2.0 * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
     )
 
 

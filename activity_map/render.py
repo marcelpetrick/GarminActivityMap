@@ -105,10 +105,7 @@ def perpendicular_distance(
     if delta_x == 0 and delta_y == 0:
         return math.hypot(point.x - start.x, point.y - start.y)
     numerator = abs(
-        delta_y * point.x
-        - delta_x * point.y
-        + end.x * start.y
-        - end.y * start.x
+        delta_y * point.x - delta_x * point.y + end.x * start.y - end.y * start.x
     )
     return numerator / math.hypot(delta_x, delta_y)
 
@@ -125,13 +122,9 @@ def split_projected_segments(
         segment.end_index for segment in track.segments if not segment.valid
     }
     for index, point in enumerate(track.points):
-        if (
-            previous is not None
-            and (
-                index in invalid_end_indexes
-                or haversine_distance_meters(previous, point)
-                > max_segment_distance_meters
-            )
+        if previous is not None and (
+            index in invalid_end_indexes
+            or haversine_distance_meters(previous, point) > max_segment_distance_meters
         ):
             if len(current) >= 2:
                 segments.append(tuple(current))

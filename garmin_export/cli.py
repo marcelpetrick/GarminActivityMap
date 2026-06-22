@@ -25,13 +25,11 @@ T = TypeVar("T")
 
 
 class GarminClient(Protocol):
-    def login(self, tokenstore: str | None = None) -> Any:
-        ...
+    def login(self, tokenstore: str | None = None) -> Any: ...
 
     def get_activities(
         self, start: int = 0, limit: int = 20, activitytype: str | None = None
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
     def get_activities_by_date(
         self,
@@ -39,14 +37,11 @@ class GarminClient(Protocol):
         enddate: str | None = None,
         activitytype: str | None = None,
         sortorder: str | None = None,
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
-    def get_activity(self, activity_id: str) -> dict[str, Any]:
-        ...
+    def get_activity(self, activity_id: str) -> dict[str, Any]: ...
 
-    def get_activity_details(self, activity_id: str) -> dict[str, Any]:
-        ...
+    def get_activity_details(self, activity_id: str) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -596,8 +591,10 @@ def update_progress(output_dir: Path, progress: ExportProgress) -> None:
         elapsed = max((datetime.now(UTC) - started).total_seconds(), 0.0)
         remaining_seconds = elapsed / processed * progress.pending
         progress.estimated_completion_at = (
-            datetime.now(UTC) + timedelta(seconds=remaining_seconds)
-        ).replace(microsecond=0).isoformat()
+            (datetime.now(UTC) + timedelta(seconds=remaining_seconds))
+            .replace(microsecond=0)
+            .isoformat()
+        )
     elif not progress.pending:
         progress.estimated_completion_at = progress.updated_at
     write_progress(output_dir, progress)

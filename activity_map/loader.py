@@ -40,9 +40,7 @@ LONGITUDE_KEYS = frozenset(
     }
 )
 LATITUDE_METRIC_KEYS = frozenset({"directLatitude", "enhancedLatitude", "latitude"})
-LONGITUDE_METRIC_KEYS = frozenset(
-    {"directLongitude", "enhancedLongitude", "longitude"}
-)
+LONGITUDE_METRIC_KEYS = frozenset({"directLongitude", "enhancedLongitude", "longitude"})
 SEMICIRCLE_FACTOR = 180.0 / 2**31
 MIN_SEMICIRCLE_ABS = 1_000_000.0
 TIMESTAMP_KEYS = (
@@ -52,9 +50,7 @@ TIMESTAMP_KEYS = (
     "startTimeLocal",
     "calendarEventInfo",
 )
-TIMESTAMP_METRIC_KEYS = frozenset(
-    {"directTimestamp", "timestamp", "activityTimestamp"}
-)
+TIMESTAMP_METRIC_KEYS = frozenset({"directTimestamp", "timestamp", "activityTimestamp"})
 ALTITUDE_KEYS = ("altitude", "elevation", "altitudeMeters", "enhancedAltitude")
 ALTITUDE_METRIC_KEYS = frozenset(
     {"directElevation", "enhancedElevation", "altitude", "elevation"}
@@ -321,8 +317,7 @@ def validate_segments(
                 if speed > max_speed_kmh:
                     valid = False
                     reason = (
-                        f"implied speed {speed:.1f} km/h exceeds "
-                        f"{max_speed_kmh:g} km/h"
+                        f"implied speed {speed:.1f} km/h exceeds {max_speed_kmh:g} km/h"
                     )
         if reason is not None:
             messages.append(f"Segment {index}-{index + 1}: {reason}")

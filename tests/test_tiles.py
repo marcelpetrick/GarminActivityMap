@@ -38,12 +38,18 @@ class StubTileCache(TileCache):
 
 
 def test_viewport_tile_zoom_scales_with_map_zoom() -> None:
-    assert viewport_tile_zoom(
-        Viewport(ProjectedPoint(0.5, 0.5), zoom=256.0, width=512, height=512)
-    ) == 0
-    assert viewport_tile_zoom(
-        Viewport(ProjectedPoint(0.5, 0.5), zoom=4096.0, width=512, height=512)
-    ) == 4
+    assert (
+        viewport_tile_zoom(
+            Viewport(ProjectedPoint(0.5, 0.5), zoom=256.0, width=512, height=512)
+        )
+        == 0
+    )
+    assert (
+        viewport_tile_zoom(
+            Viewport(ProjectedPoint(0.5, 0.5), zoom=4096.0, width=512, height=512)
+        )
+        == 4
+    )
 
 
 def test_viewport_tile_zoom_caps_provider_requests_at_tile_limit() -> None:

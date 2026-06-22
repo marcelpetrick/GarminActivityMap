@@ -30,6 +30,11 @@ bootstrap() {
   python -m pip install -e ".[dev]"
 }
 
+formatting() {
+  . .venv/bin/activate
+  python -m ruff format --check .
+}
+
 lint() {
   . .venv/bin/activate
   bash -n localPipeline.sh exportGarminYears.sh
@@ -37,8 +42,26 @@ lint() {
 }
 
 static_analysis() {
+  local complexity_output
   . .venv/bin/activate
   python -m mypy activity_map garmin_export tests
+  python -m vulture activity_map garmin_export scripts tests \
+    --min-confidence 90 \
+    --ignore-names sortorder,prompt
+  complexity_output="$(
+    python -m radon cc activity_map garmin_export scripts -n D -s
+  )"
+  if [ -n "$complexity_output" ]; then
+    printf '%s\n' "$complexity_output"
+    return 1
+  fi
+  printf 'No functions with complexity grade D or worse\n'
+  python -m pip check
+}
+
+architecture_checks() {
+  . .venv/bin/activate
+  python scripts/check_architecture.py
 }
 
 docs_build() {
@@ -59,6 +82,11 @@ test_suite() {
   python -m pytest
 }
 
+coverage_check() {
+  . .venv/bin/activate
+  python -m coverage report --fail-under=85
+}
+
 run_smoke() {
   . .venv/bin/activate
   export QT_QPA_PLATFORM=offscreen
@@ -69,11 +97,14 @@ run_smoke() {
 }
 
 run_step "bootstrap" bootstrap
+run_step "formatting" formatting
 run_step "lint" lint
 run_step "static" static_analysis
+run_step "architecture" architecture_checks
 run_step "docs" docs_build
 run_step "build" build
 run_step "test" test_suite
+run_step "coverage" coverage_check
 run_step "run" run_smoke
 
 printf '\nSummary\n'

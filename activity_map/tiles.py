@@ -50,10 +50,7 @@ class TileCache:
 
     def tile_path(self, coordinate: TileCoordinate) -> Path:
         return (
-            self.root
-            / str(coordinate.zoom)
-            / str(coordinate.x)
-            / f"{coordinate.y}.png"
+            self.root / str(coordinate.zoom) / str(coordinate.x) / f"{coordinate.y}.png"
         )
 
     def load_cached_tile(self, coordinate: TileCoordinate) -> bytes | None:

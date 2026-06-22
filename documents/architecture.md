@@ -42,7 +42,7 @@ flowchart TB
 - PyQt desktop GUI: `activity_map`, responsible for loading exports, parsing GPS tracks, projecting coordinates, and rendering the interactive map.
 - Map tile cache: `activity_map.tiles`, responsible for choosing visible OpenStreetMap tiles, using a clear request identity, and caching downloaded base-map images under ignored local storage.
 - Documentation build: `scripts/build_docs.py`, responsible for validating required C4 sections and producing a local documentation bundle.
-- Quality pipeline: `localPipeline.sh`, responsible for bootstrap, linting, static analysis, docs build, package build, tests, and smoke runs.
+- Quality pipeline: `localPipeline.sh`, responsible for bootstrap, formatting, linting, type/dead-code/complexity/dependency analysis, architecture enforcement, docs and package builds, tests, coverage, and smoke runs.
 
 ## Level 3: Component View
 
