@@ -12,9 +12,13 @@ from activity_map.widgets import MainWindow
 
 
 @pytest.fixture(autouse=True)
-def offscreen_qt(monkeypatch: pytest.MonkeyPatch) -> None:
+def offscreen_qt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("ACTIVITY_MAP_DISABLE_TILES", "1")
+    monkeypatch.setenv(
+        "ACTIVITY_MAP_SETTINGS_PATH",
+        str(tmp_path / "settings.json"),
+    )
 
 
 def write_activity(path: Path) -> None:
@@ -112,6 +116,34 @@ def test_main_window_toggles_track_names(qtbot: QtBot) -> None:
     window.track_names_checkbox.setChecked(True)
 
     assert window.canvas.track_names_visible is True
+
+
+def test_main_window_persists_runtime_preferences(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings_path = tmp_path / "preferences.json"
+    monkeypatch.setenv("ACTIVITY_MAP_SETTINGS_PATH", str(settings_path))
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.opacity_slider.setValue(44)
+    window.track_names_checkbox.setChecked(True)
+    window.map_opacity_slider.setValue(33)
+    window.map_layer_checkbox.setChecked(False)
+    window.canvas.set_track_color(QColor("#123456"))
+    window.settings.track_color = "#123456"
+    window.save_settings()
+
+    restored = MainWindow()
+    qtbot.addWidget(restored)
+
+    assert restored.canvas.track_opacity == 0.44
+    assert restored.canvas.track_names_visible is True
+    assert restored.canvas.tile_opacity == 0.33
+    assert restored.canvas.tile_layer_enabled is False
+    assert restored.canvas.track_color.name() == "#123456"
 
 
 def test_main_smoke_test_returns_success(

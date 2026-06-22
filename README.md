@@ -12,7 +12,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.26`
+- Version: `0.0.27`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -139,6 +139,12 @@ Controls:
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
+
+The app persists the last loaded directory, last run timestamp, track color,
+track-name visibility, track/map opacity, map-layer state, and future preference
+fields in `~/.config/GarminActivityMap/settings.json`. Missing or corrupt files
+fall back to safe defaults. Set `ACTIVITY_MAP_SETTINGS_PATH` to use a different
+location.
 
 Map colors:
 

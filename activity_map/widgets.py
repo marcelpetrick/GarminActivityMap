@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, pyqtSignal
@@ -47,6 +48,7 @@ from .geo import (
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
 from .render import RenderTrack, geometry_for_zoom, prepare_tracks, track_label_anchor
+from .settings import SettingsStore
 from .tiles import (
     OSM_ATTRIBUTION,
     TileCache,
@@ -410,13 +412,19 @@ class MapCanvas(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, settings_store: SettingsStore | None = None) -> None:
         super().__init__()
         self.setWindowTitle(f"Garmin Activity Map {__version__}")
         self.resize(1200, 760)
         self.report: LoadReport | None = None
+        self.settings_store = settings_store or SettingsStore()
+        self.settings = self.settings_store.load()
+        self.settings.last_run_timestamp = (
+            datetime.now(UTC).replace(microsecond=0).isoformat()
+        )
 
         self.canvas = MapCanvas()
+        self.apply_canvas_settings()
         self.status_label = QLabel("No directory loaded")
         self.warning_label = QLabel("")
         self.warning_label.setWordWrap(True)
@@ -426,27 +434,27 @@ class MainWindow(QMainWindow):
         reset_button = QPushButton("Reset View")
         reset_button.clicked.connect(self.canvas.reset_view)
 
-        opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        opacity_slider.setRange(0, 100)
-        opacity_slider.setValue(72)
-        opacity_slider.valueChanged.connect(self.canvas.set_track_opacity)
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(self.settings.track_opacity)
+        self.opacity_slider.valueChanged.connect(self.set_track_opacity)
 
         self.track_names_checkbox = QCheckBox("Show track names")
-        self.track_names_checkbox.setChecked(False)
-        self.track_names_checkbox.toggled.connect(self.canvas.set_track_names_visible)
+        self.track_names_checkbox.setChecked(self.settings.show_track_names)
+        self.track_names_checkbox.toggled.connect(self.set_track_names_visible)
 
         self.track_color_button = QPushButton("Track Color")
         self.track_color_button.clicked.connect(self.choose_track_color)
         self.update_track_color_button()
 
-        map_opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        map_opacity_slider.setRange(0, 100)
-        map_opacity_slider.setValue(82)
-        map_opacity_slider.valueChanged.connect(self.canvas.set_tile_opacity)
+        self.map_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.map_opacity_slider.setRange(0, 100)
+        self.map_opacity_slider.setValue(self.settings.map_opacity)
+        self.map_opacity_slider.valueChanged.connect(self.set_map_opacity)
 
-        map_layer_checkbox = QCheckBox("OpenStreetMap layer")
-        map_layer_checkbox.setChecked(self.canvas.tile_layer_enabled)
-        map_layer_checkbox.toggled.connect(self.canvas.set_tile_layer_enabled)
+        self.map_layer_checkbox = QCheckBox("OpenStreetMap layer")
+        self.map_layer_checkbox.setChecked(self.canvas.tile_layer_enabled)
+        self.map_layer_checkbox.toggled.connect(self.set_map_layer_enabled)
 
         side_panel = QFrame()
         side_panel.setObjectName("sidePanel")
@@ -465,11 +473,11 @@ class MainWindow(QMainWindow):
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(self.track_color_button)
-        side_layout.addWidget(opacity_slider)
+        side_layout.addWidget(self.opacity_slider)
         side_layout.addWidget(self.track_names_checkbox)
         side_layout.addWidget(field_label("Map opacity"))
-        side_layout.addWidget(map_opacity_slider)
-        side_layout.addWidget(map_layer_checkbox)
+        side_layout.addWidget(self.map_opacity_slider)
+        side_layout.addWidget(self.map_layer_checkbox)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Load status"))
         side_layout.addWidget(self.status_label)
@@ -483,6 +491,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.canvas, 1)
         self.setCentralWidget(root)
         self.setStyleSheet(APP_STYLES)
+        self.save_settings()
 
     def choose_directory(self) -> None:
         directory = QFileDialog.getExistingDirectory(
@@ -502,6 +511,8 @@ class MainWindow(QMainWindow):
         if color.isValid():
             self.canvas.set_track_color(color)
             self.update_track_color_button()
+            self.settings.track_color = color.name()
+            self.save_settings()
 
     def update_track_color_button(self) -> None:
         color = self.canvas.track_color.name()
@@ -528,6 +539,47 @@ class MainWindow(QMainWindow):
             )
         else:
             self.warning_label.setText("No warnings")
+        self.settings.last_track_directory = str(path)
+        self.save_settings()
+
+    def load_last_directory(self) -> None:
+        if self.settings.last_track_directory is None:
+            return
+        path = Path(self.settings.last_track_directory)
+        if path.exists():
+            self.load_path(path)
+
+    def apply_canvas_settings(self) -> None:
+        self.canvas.set_track_color(QColor(self.settings.track_color))
+        self.canvas.set_track_opacity(self.settings.track_opacity)
+        self.canvas.set_track_names_visible(self.settings.show_track_names)
+        self.canvas.set_tile_opacity(self.settings.map_opacity)
+        self.canvas.set_tile_layer_enabled(
+            self.canvas.tile_layer_enabled and self.settings.map_layer_enabled
+        )
+
+    def set_track_opacity(self, value: int) -> None:
+        self.canvas.set_track_opacity(value)
+        self.settings.track_opacity = value
+        self.save_settings()
+
+    def set_track_names_visible(self, visible: bool) -> None:
+        self.canvas.set_track_names_visible(visible)
+        self.settings.show_track_names = visible
+        self.save_settings()
+
+    def set_map_opacity(self, value: int) -> None:
+        self.canvas.set_tile_opacity(value)
+        self.settings.map_opacity = value
+        self.save_settings()
+
+    def set_map_layer_enabled(self, enabled: bool) -> None:
+        self.canvas.set_tile_layer_enabled(enabled)
+        self.settings.map_layer_enabled = enabled
+        self.save_settings()
+
+    def save_settings(self) -> None:
+        self.settings_store.save(self.settings)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
         self.canvas.shutdown_tiles()

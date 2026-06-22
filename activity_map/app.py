@@ -20,6 +20,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     window = MainWindow()
     if args.directory:
         window.load_path(args.directory)
+    elif not args.smoke_test:
+        window.load_last_directory()
 
     if args.smoke_test:
         window.resize(960, 640)
