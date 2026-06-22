@@ -7,7 +7,7 @@
 - Run the GUI smoke check: `QT_QPA_PLATFORM=offscreen python -m activity_map --smoke-test`
 - Install runtime dependencies: `python -m pip install -r requirements.txt`
 - Run tests: `python -m pytest`
-- Run tests with coverage: `python -m pytest --cov=activity_map --cov=garmin_export --cov-report=term-missing --cov-fail-under=85`
+- Run tests with coverage: `python -m pytest --cov=activity_map --cov=garmin_export --cov-report=term-missing --cov-fail-under=95`
 - Run linting: `python -m ruff check .`
 - Run static analysis: `python -m mypy activity_map garmin_export tests`
 - Build documentation: `python scripts/build_docs.py`
@@ -40,7 +40,8 @@
 - Add GUI smoke tests where practical without requiring private Garmin data.
 - Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.
 - Keep C4-style architecture documentation valid through the documentation build step.
-- Maintain coverage at or above the configured threshold unless the threshold is raised.
+- Maintain coverage at or above 95%; do not exclude testable application code
+  merely to satisfy the threshold.
 
 ## Versioning
 

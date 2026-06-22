@@ -84,7 +84,7 @@ test_suite() {
 
 coverage_check() {
   . .venv/bin/activate
-  python -m coverage report --fail-under=85
+  python -m coverage report --fail-under=95
 }
 
 run_smoke() {
