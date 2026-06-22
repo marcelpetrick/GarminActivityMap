@@ -13,6 +13,8 @@ from pytest import CaptureFixture, MonkeyPatch
 from garmin_export import cli
 from garmin_export.cli import (
     ExportConfig,
+    ExportProgress,
+    RequestExecutor,
     build_client,
     collect_activities,
     collect_activities_by_date,
@@ -20,6 +22,7 @@ from garmin_export.cli import (
     export_activities,
     extract_activity_id,
     is_rate_limit_error,
+    is_retryable_error,
     iter_activities,
     load_local_env,
     main,
@@ -365,7 +368,9 @@ def test_throttle_before_detail_uses_delay_and_jitter(
     assert sleeps == [1.75]
 
 
-def test_export_stops_on_rate_limit(tmp_path: Path) -> None:
+def test_export_records_failure_after_rate_limit_retries_are_exhausted(
+    tmp_path: Path,
+) -> None:
     class RateLimitedClient(FakeClient):
         def get_activity(self, activity_id: str) -> dict[str, Any]:
             raise RuntimeError("429 Too Many Requests")
@@ -381,15 +386,63 @@ def test_export_stops_on_rate_limit(tmp_path: Path) -> None:
         detail_delay_seconds=0,
         detail_jitter_seconds=0,
         skip_existing=True,
+        max_retries=0,
     )
 
-    with pytest.raises(RuntimeError, match="rate-limit"):
-        export_activities(RateLimitedClient(), config)
+    result = export_activities(RateLimitedClient(), config)
+    state = json.loads((tmp_path / "export-state.json").read_text())
+
+    assert result.failed_count == 3
+    assert result.activity_count == 0
+    assert state["failures"] == 3
+    assert state["pending"] == 0
+    assert state["failed_activity_ids"] == ["101", "102", "103"]
 
 
 def test_is_rate_limit_error_checks_status_code_and_message() -> None:
     assert is_rate_limit_error(RuntimeError("429 Too Many Requests"))
     assert not is_rate_limit_error(RuntimeError("temporary network failure"))
+    assert is_retryable_error(TimeoutError("timed out"))
+    assert is_retryable_error(RuntimeError("503 temporarily unavailable"))
+    assert not is_retryable_error(ValueError("invalid payload"))
+
+
+def test_request_executor_retries_with_exponential_backoff(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    attempts = 0
+    sleeps: list[float] = []
+    config = ExportConfig(
+        output_dir=Path("unused"),
+        page_size=2,
+        include_details=False,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+        max_retries=3,
+        backoff_initial_seconds=2,
+        backoff_max_seconds=5,
+    )
+    progress = ExportProgress("", "", failed_activity_ids=[])
+    monkeypatch.setattr(cli, "sleep_seconds", sleeps.append)
+
+    def flaky_operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise TimeoutError("network timeout")
+        return "ok"
+
+    result = RequestExecutor(config, progress).call(flaky_operation, "test request")
+
+    assert result == "ok"
+    assert attempts == 3
+    assert sleeps == [2, 4]
+    assert progress.retries == 2
 
 
 def test_load_local_env_missing_file_is_noop(tmp_path: Path) -> None:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .cli import (
     DEFAULT_PAGE_SIZE,
+    DEFAULT_REQUEST_INTERVAL_SECONDS,
     ExportConfig,
     ExportResult,
     GarminClient,
@@ -36,6 +37,10 @@ class YearRangeConfig:
     detail_delay_seconds: float
     detail_jitter_seconds: float
     verbose: bool = False
+    request_interval_seconds: float = 0.0
+    max_retries: int = 5
+    backoff_initial_seconds: float = 2.0
+    backoff_max_seconds: float = 60.0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -128,6 +133,15 @@ def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
         action="store_true",
         help="Print timestamped progress while collecting and exporting activities.",
     )
+    parser.add_argument(
+        "--request-interval",
+        type=float,
+        default=DEFAULT_REQUEST_INTERVAL_SECONDS,
+        help="Minimum seconds between Garmin requests. Default: 1 second.",
+    )
+    parser.add_argument("--max-retries", type=int, default=5)
+    parser.add_argument("--backoff-initial", type=float, default=2.0)
+    parser.add_argument("--backoff-max", type=float, default=60.0)
     args = parser.parse_args(argv)
 
     if args.page_size < 1:
@@ -136,6 +150,10 @@ def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
         parser.error("--detail-delay must be at least 0")
     if args.detail_jitter < 0:
         parser.error("--detail-jitter must be at least 0")
+    if args.request_interval < 0 or args.max_retries < 0:
+        parser.error("request interval and retries must be at least 0")
+    if args.backoff_initial < 0 or args.backoff_max < args.backoff_initial:
+        parser.error("invalid backoff range")
     for year in (args.start_year, args.end_year):
         validate_year(parser, year)
 
@@ -150,6 +168,10 @@ def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
         detail_delay_seconds=args.detail_delay,
         detail_jitter_seconds=args.detail_jitter,
         verbose=args.verbose,
+        request_interval_seconds=args.request_interval,
+        max_retries=args.max_retries,
+        backoff_initial_seconds=args.backoff_initial,
+        backoff_max_seconds=args.backoff_max,
     )
 
 
@@ -190,6 +212,10 @@ def export_config_for_year(config: YearRangeConfig, year: int) -> ExportConfig:
         detail_jitter_seconds=config.detail_jitter_seconds,
         skip_existing=True,
         verbose=config.verbose,
+        request_interval_seconds=config.request_interval_seconds,
+        max_retries=config.max_retries,
+        backoff_initial_seconds=config.backoff_initial_seconds,
+        backoff_max_seconds=config.backoff_max_seconds,
     )
 
 

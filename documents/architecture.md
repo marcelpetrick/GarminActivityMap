@@ -38,7 +38,7 @@ flowchart TB
   tests --> docs
 ```
 
-- Exporter CLI: `garmin_export`, responsible for Garmin login, activity pagination, detail retrieval, and JSON writing.
+- Exporter CLI: `garmin_export`, responsible for Garmin login, paced and retried activity requests, resumable progress checkpoints, detail retrieval, and atomic JSON writing.
 - PyQt desktop GUI: `activity_map`, responsible for loading exports, parsing GPS tracks, projecting coordinates, and rendering the interactive map.
 - Map tile cache: `activity_map.tiles`, responsible for choosing visible OpenStreetMap tiles, using a clear request identity, and caching downloaded base-map images under ignored local storage.
 - Documentation build: `scripts/build_docs.py`, responsible for validating required C4 sections and producing a local documentation bundle.

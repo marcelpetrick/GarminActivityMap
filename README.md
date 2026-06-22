@@ -12,7 +12,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.22`
+- Version: `0.0.23`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -54,8 +54,10 @@ python -m garmin_export --start-date 2026-05-13 --end-date 2026-06-13
 The exporter is intentionally conservative for detailed activity downloads:
 
 - Existing activity JSON files are skipped by default so interrupted exports can resume without repeating calls.
-- Detail downloads wait between requests with `--detail-delay` plus random `--detail-jitter`.
-- A Garmin `429 Too Many Requests` response stops the export instead of retrying aggressively.
+- All Garmin requests are paced at one request per second by default; configure this with `--request-interval`.
+- Detail downloads can add an extra `--detail-delay` plus random `--detail-jitter`.
+- HTTP 403, 429, 5xx, timeout, and network failures use bounded exponential backoff controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`.
+- `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities remain absent and are retried on the next run.
 
 For a cautious 2026 export:
 
