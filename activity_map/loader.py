@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .models import ActivityTrack, LoadReport, LoadWarning, TrackPoint
+from .geo import haversine_distance_meters
+from .models import ActivityTrack, LoadReport, LoadWarning, TrackPoint, TrackSegment
 
 LATITUDE_KEYS = frozenset(
     {
@@ -36,9 +38,23 @@ LONGITUDE_METRIC_KEYS = frozenset(
 )
 SEMICIRCLE_FACTOR = 180.0 / 2**31
 MIN_SEMICIRCLE_ABS = 1_000_000.0
+TIMESTAMP_KEYS = (
+    "timestamp",
+    "time",
+    "startTimeGMT",
+    "startTimeLocal",
+    "calendarEventInfo",
+)
+TIMESTAMP_METRIC_KEYS = frozenset(
+    {"directTimestamp", "timestamp", "activityTimestamp"}
+)
+DEFAULT_MAX_SEGMENT_SPEED_KMH = 30.0
 
 
-def load_directory(root: Path) -> LoadReport:
+def load_directory(
+    root: Path,
+    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+) -> LoadReport:
     warnings: list[LoadWarning] = []
     tracks: list[ActivityTrack] = []
     files_read = 0
@@ -56,7 +72,7 @@ def load_directory(root: Path) -> LoadReport:
             continue
         files_read += 1
         try:
-            track = load_activity_file(file_path)
+            track = load_activity_file(file_path, max_speed_kmh=max_speed_kmh)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             warnings.append(LoadWarning(file_path, str(exc)))
             continue
@@ -74,7 +90,10 @@ def load_directory(root: Path) -> LoadReport:
     )
 
 
-def load_activity_file(file_path: Path) -> ActivityTrack | None:
+def load_activity_file(
+    file_path: Path,
+    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+) -> ActivityTrack | None:
     payload = json.loads(file_path.read_text(encoding="utf-8"))
     if not isinstance(payload, Mapping):
         raise ValueError("Activity file must contain a JSON object")
@@ -83,11 +102,14 @@ def load_activity_file(file_path: Path) -> ActivityTrack | None:
     if not points:
         return None
 
+    segments, validation_messages = validate_segments(points, max_speed_kmh)
     return ActivityTrack(
         activity_id=find_activity_id(payload) or file_path.stem,
         name=find_activity_name(payload) or file_path.stem,
         source_file=file_path,
         points=points,
+        segments=segments,
+        validation_messages=validation_messages,
     )
 
 
@@ -122,6 +144,7 @@ def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
 
         latitude_index = find_metric_index(descriptors, LATITUDE_METRIC_KEYS)
         longitude_index = find_metric_index(descriptors, LONGITUDE_METRIC_KEYS)
+        timestamp_index = find_metric_index(descriptors, TIMESTAMP_METRIC_KEYS)
         if latitude_index is None or longitude_index is None:
             continue
 
@@ -131,7 +154,14 @@ def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
             metrics = row.get("metrics")
             if not isinstance(metrics, Sequence):
                 continue
-            points.extend(parse_metric_row(metrics, latitude_index, longitude_index))
+            points.extend(
+                parse_metric_row(
+                    metrics,
+                    latitude_index,
+                    longitude_index,
+                    timestamp_index,
+                )
+            )
     return points
 
 
@@ -157,11 +187,23 @@ def parse_point_sequence(values: Sequence[Any]) -> Iterator[TrackPoint | None]:
 
 
 def parse_metric_row(
-    metrics: Sequence[Any], latitude_index: int, longitude_index: int
+    metrics: Sequence[Any],
+    latitude_index: int,
+    longitude_index: int,
+    timestamp_index: int | None = None,
 ) -> list[TrackPoint]:
     if latitude_index >= len(metrics) or longitude_index >= len(metrics):
         return []
-    point = make_point(metrics[latitude_index], metrics[longitude_index])
+    timestamp = (
+        metrics[timestamp_index]
+        if timestamp_index is not None and timestamp_index < len(metrics)
+        else None
+    )
+    point = make_point(
+        metrics[latitude_index],
+        metrics[longitude_index],
+        timestamp,
+    )
     return [] if point is None else [point]
 
 
@@ -170,15 +212,95 @@ def parse_coordinate_mapping(item: Mapping[str, Any]) -> TrackPoint | None:
     longitude = first_value_for_keys(item, LONGITUDE_KEYS)
     if latitude is None or longitude is None:
         return None
-    return make_point(latitude, longitude)
+    return make_point(latitude, longitude, first_value_for_keys(item, TIMESTAMP_KEYS))
 
 
-def make_point(latitude_value: Any, longitude_value: Any) -> TrackPoint | None:
+def make_point(
+    latitude_value: Any,
+    longitude_value: Any,
+    timestamp_value: Any = None,
+) -> TrackPoint | None:
     latitude = normalize_coordinate(latitude_value, "latitude")
     longitude = normalize_coordinate(longitude_value, "longitude")
     if latitude is None or longitude is None:
         return None
-    return TrackPoint(latitude=latitude, longitude=longitude)
+    return TrackPoint(
+        latitude=latitude,
+        longitude=longitude,
+        timestamp=parse_timestamp(timestamp_value),
+    )
+
+
+def parse_timestamp(value: Any) -> datetime | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    if isinstance(value, int | float):
+        seconds = float(value)
+        if abs(seconds) > 10_000_000_000:
+            seconds /= 1_000.0
+        try:
+            return datetime.fromtimestamp(seconds, tz=UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def validate_segments(
+    points: Sequence[TrackPoint],
+    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+) -> tuple[tuple[TrackSegment, ...], tuple[str, ...]]:
+    segments: list[TrackSegment] = []
+    messages: list[str] = []
+    missing_timestamps = 0
+    for index, (start, end) in enumerate(zip(points, points[1:], strict=False)):
+        distance = haversine_distance_meters(start, end)
+        duration: float | None = None
+        speed: float | None = None
+        valid = True
+        reason: str | None = None
+        if start.timestamp is None or end.timestamp is None:
+            missing_timestamps += 1
+        else:
+            duration = (end.timestamp - start.timestamp).total_seconds()
+            if duration <= 0:
+                valid = False
+                reason = "timestamps are duplicated or out of order"
+            else:
+                speed = distance / duration * 3.6
+                if speed > max_speed_kmh:
+                    valid = False
+                    reason = (
+                        f"implied speed {speed:.1f} km/h exceeds "
+                        f"{max_speed_kmh:g} km/h"
+                    )
+        if reason is not None:
+            messages.append(f"Segment {index}-{index + 1}: {reason}")
+        segments.append(
+            TrackSegment(
+                start_index=index,
+                end_index=index + 1,
+                distance_meters=distance,
+                duration_seconds=duration,
+                speed_kmh=speed,
+                valid=valid,
+                reason=reason,
+            )
+        )
+    if missing_timestamps:
+        messages.append(
+            f"{missing_timestamps} segment(s) could not be speed-checked "
+            "because timestamps are missing"
+        )
+    return tuple(segments), tuple(messages)
 
 
 def normalize_coordinate(value: Any, axis: str) -> float | None:
@@ -208,7 +330,9 @@ def find_metric_index(
         if not isinstance(descriptor, Mapping):
             continue
         key = descriptor.get("key") or descriptor.get("metricKey")
-        index = descriptor.get("metricsIndex") or descriptor.get("index")
+        index = descriptor.get("metricsIndex")
+        if index is None:
+            index = descriptor.get("index")
         if key in accepted_keys and isinstance(index, int):
             return index
     return None

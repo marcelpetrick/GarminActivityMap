@@ -513,7 +513,12 @@ class MainWindow(QMainWindow):
         )
         if self.report.warnings:
             self.warning_label.setText(
-                f"{len(self.report.warnings)} files skipped or incomplete"
+                f"{len(self.report.warnings)} files skipped or incomplete; "
+                f"{self.report.validation_issue_count} track validation issues"
+            )
+        elif self.report.validation_issue_count:
+            self.warning_label.setText(
+                f"{self.report.validation_issue_count} track validation issues"
             )
         else:
             self.warning_label.setText("No warnings")

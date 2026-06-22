@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 
@@ -8,6 +9,18 @@ from pathlib import Path
 class TrackPoint:
     latitude: float
     longitude: float
+    timestamp: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TrackSegment:
+    start_index: int
+    end_index: int
+    distance_meters: float
+    duration_seconds: float | None
+    speed_kmh: float | None
+    valid: bool
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +29,8 @@ class ActivityTrack:
     name: str
     source_file: Path
     points: tuple[TrackPoint, ...]
+    segments: tuple[TrackSegment, ...] = ()
+    validation_messages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,3 +53,7 @@ class LoadReport:
     @property
     def point_count(self) -> int:
         return sum(len(track.points) for track in self.tracks)
+
+    @property
+    def validation_issue_count(self) -> int:
+        return sum(len(track.validation_messages) for track in self.tracks)

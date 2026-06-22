@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from activity_map.loader import (
@@ -6,6 +7,8 @@ from activity_map.loader import (
     load_activity_file,
     load_directory,
     normalize_coordinate,
+    parse_timestamp,
+    validate_segments,
 )
 from activity_map.models import TrackPoint
 
@@ -155,3 +158,68 @@ def test_normalize_coordinate_rejects_invalid_values() -> None:
     assert normalize_coordinate(None, "latitude") is None
     assert normalize_coordinate("nan", "latitude") is None
     assert normalize_coordinate(200, "longitude") is None
+
+
+def test_timestamped_segments_flag_impossible_speed_without_changing_source(
+    tmp_path: Path,
+) -> None:
+    activity_file = tmp_path / "spike.json"
+    payload = {
+        "summary": {"activityId": 9},
+        "details": {
+            "geoPolylineDTO": {
+                "polyline": [
+                    {
+                        "lat": 52.5,
+                        "lon": 13.4,
+                        "timestamp": "2026-06-22T08:00:00Z",
+                    },
+                    {
+                        "lat": 53.5,
+                        "lon": 14.4,
+                        "timestamp": "2026-06-22T08:00:01Z",
+                    },
+                    {
+                        "lat": 53.5001,
+                        "lon": 14.4001,
+                        "timestamp": "2026-06-22T08:01:01Z",
+                    },
+                ]
+            }
+        },
+    }
+    write_json(activity_file, payload)
+
+    track = load_activity_file(activity_file)
+
+    assert track is not None
+    assert track.segments[0].valid is False
+    assert track.segments[0].speed_kmh is not None
+    assert track.segments[0].speed_kmh > 30
+    assert "implied speed" in track.validation_messages[0]
+    assert json.loads(activity_file.read_text()) == payload
+
+
+def test_segment_validation_detects_duplicate_and_missing_timestamps() -> None:
+    points = (
+        TrackPoint(52.0, 13.0, datetime(2026, 6, 22, tzinfo=UTC)),
+        TrackPoint(52.001, 13.001, datetime(2026, 6, 22, tzinfo=UTC)),
+        TrackPoint(52.002, 13.002),
+    )
+
+    segments, messages = validate_segments(points)
+
+    assert segments[0].valid is False
+    assert "duplicated or out of order" in (segments[0].reason or "")
+    assert segments[1].valid is True
+    assert any("timestamps are missing" in message for message in messages)
+
+
+def test_parse_timestamp_supports_iso_and_epoch_milliseconds() -> None:
+    assert parse_timestamp("2026-06-22T08:00:00Z") == datetime(
+        2026, 6, 22, 8, tzinfo=UTC
+    )
+    assert parse_timestamp(1_750_579_200_000) == datetime.fromtimestamp(
+        1_750_579_200, tz=UTC
+    )
+    assert parse_timestamp("invalid") is None

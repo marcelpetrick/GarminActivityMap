@@ -40,10 +40,17 @@ def split_projected_segments(
     current: list[ProjectedPoint] = []
     previous = None
 
-    for point in track.points:
+    invalid_end_indexes = {
+        segment.end_index for segment in track.segments if not segment.valid
+    }
+    for index, point in enumerate(track.points):
         if (
             previous is not None
-            and haversine_distance_meters(previous, point) > max_segment_distance_meters
+            and (
+                index in invalid_end_indexes
+                or haversine_distance_meters(previous, point)
+                > max_segment_distance_meters
+            )
         ):
             if len(current) >= 2:
                 segments.append(tuple(current))

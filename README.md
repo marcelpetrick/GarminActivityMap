@@ -12,7 +12,7 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.23`
+- Version: `0.0.24`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -145,6 +145,11 @@ Map colors:
 The selected track color is used for all activity tracks.
 
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
+
+When timestamps are available, the loader validates their ordering and computes
+geodesic segment speeds. Segments above 30 km/h are flagged and disconnected
+from rendered geometry to suppress GPS spikes; the source JSON is never changed.
+Use `load_directory(path, max_speed_kmh=...)` to configure the threshold.
 
 For a headless smoke check:
 

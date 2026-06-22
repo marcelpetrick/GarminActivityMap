@@ -65,7 +65,7 @@ flowchart LR
   render --> geo
 ```
 
-- `activity_map.loader` recursively reads Garmin JSON files and extracts usable GPS tracks while collecting warnings for malformed or coordinate-free files.
+- `activity_map.loader` recursively reads Garmin JSON files, validates coordinates and timestamps, computes segment speed, and flags malformed, coordinate-free, or implausible geometry without changing source payloads.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
 - `activity_map.render` prepares cached render data so painting can stay responsive on larger exports.
 - `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.

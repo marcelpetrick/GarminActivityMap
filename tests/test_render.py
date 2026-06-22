@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from activity_map.geo import project_point
-from activity_map.models import ActivityTrack, TrackPoint
+from activity_map.models import ActivityTrack, TrackPoint, TrackSegment
 from activity_map.render import (
     prepare_tracks,
     split_projected_segments,
@@ -87,3 +87,28 @@ def test_track_label_anchor_uses_lower_left_projected_track_corner() -> None:
     all_points = [point for segment in prepared.segments for point in segment]
     assert anchor.x == min(point.x for point in all_points)
     assert anchor.y == max(point.y for point in all_points)
+
+
+def test_split_projected_segments_breaks_flagged_speed_outlier() -> None:
+    points = (
+        TrackPoint(52.0, 13.0),
+        TrackPoint(52.001, 13.001),
+        TrackPoint(52.002, 13.002),
+        TrackPoint(52.003, 13.003),
+    )
+    track = ActivityTrack(
+        activity_id="speed",
+        name="Speed outlier",
+        source_file=Path("speed.json"),
+        points=points,
+        segments=(
+            TrackSegment(0, 1, 100, 10, 36, True),
+            TrackSegment(1, 2, 100, 1, 360, False, "speed"),
+            TrackSegment(2, 3, 100, 10, 36, True),
+        ),
+    )
+
+    segments = split_projected_segments(track, max_segment_distance_meters=5_000)
+
+    assert len(segments) == 2
+    assert all(len(segment) == 2 for segment in segments)
