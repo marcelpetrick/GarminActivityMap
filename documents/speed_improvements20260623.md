@@ -491,6 +491,31 @@ therefore uses one background worker: wall-clock load time is similar, but the
 window remains interactive and can continue repainting. Parallel modes stay
 available for other storage/CPU environments and future compact-array models.
 
+### Phase 5 — Gesture-Aware Raster Cache
+
+Implemented in version `0.0.38`:
+
+- a full-quality frame captured at the start of a drag or wheel burst;
+- affine raster transformation of that snapshot during active input;
+- wheel events coalesced with a 60 ms single-shot refinement timer;
+- immediate high-quality redraw on drag release;
+- cache invalidation when data, size, color, opacity, names, or map-layer state
+  changes.
+
+Measured 1,000-track results:
+
+| Scenario | Refined vector frame | Cached gesture frame |
+|---|---:|---:|
+| Distributed pan | about 5.1 ms | about 0.5 ms |
+| Distributed zoom | about 5.4 ms | about 2.0 ms |
+| Dense-overlap pan | about 4.8 ms | about 0.5 ms |
+| Dense-overlap zoom | about 4.3 ms | about 2.1 ms |
+
+The cache is not required to rescue an over-budget renderer anymore; retained
+paths, culling, and adaptive LOD already do that. Its value is stable immediate
+feedback during rapid input and avoiding redundant refined frames for wheel
+events that arrive faster than the display can present them.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

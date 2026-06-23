@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QColorDialog, QFileDialog
 from pytestqt.qtbot import QtBot
 
 import activity_map.widgets as widgets
-from activity_map.geo import ProjectedPoint, Viewport
+from activity_map.geo import ProjectedPoint, ScreenPoint, Viewport
 from activity_map.loading import PreparedLoad
 from activity_map.models import (
     ActivityTrack,
@@ -20,7 +20,7 @@ from activity_map.models import (
     TrackPoint,
 )
 from activity_map.tiles import TileCoordinate
-from activity_map.widgets import MainWindow, MapCanvas
+from activity_map.widgets import MainWindow, MapCanvas, gesture_transform
 
 
 @pytest.fixture(autouse=True)
@@ -117,6 +117,7 @@ def test_canvas_mouse_navigation_and_resize(qtbot: QtBot) -> None:
         )
     )
     assert canvas._last_drag_pos is None
+    assert canvas._gesture_pixmap is None
 
     zoom_before = canvas.viewport.zoom
     wheel_in = QWheelEvent(
@@ -131,6 +132,7 @@ def test_canvas_mouse_navigation_and_resize(qtbot: QtBot) -> None:
     )
     canvas.wheelEvent(wheel_in)
     assert canvas.viewport.zoom > zoom_before
+    assert canvas._gesture_pixmap is not None
     wheel_out = QWheelEvent(
         QPointF(200, 200),
         QPointF(200, 200),
@@ -142,6 +144,7 @@ def test_canvas_mouse_navigation_and_resize(qtbot: QtBot) -> None:
         False,
     )
     canvas.wheelEvent(wheel_out)
+    canvas.finish_gesture()
 
     canvas.set_tracks((synthetic_track(),))
     moved = canvas.viewport.pan(100, 100)
@@ -157,6 +160,24 @@ def test_canvas_mouse_navigation_and_resize(qtbot: QtBot) -> None:
     assert canvas.viewport.center != moved.center
     assert canvas.viewport.width == canvas.width()
     assert canvas.viewport.height == canvas.height()
+
+
+def test_gesture_transform_maps_source_center_to_target_view(
+    qtbot: QtBot,
+) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    source = Viewport(ProjectedPoint(0.5, 0.5), 1_000.0, 800, 600)
+    target = source.pan(20.0, 10.0).zoom_at(
+        1.2,
+        ScreenPoint(400.0, 300.0),
+    )
+
+    mapped = gesture_transform(source, target).map(400.0, 300.0)
+    expected = target.world_to_screen(source.center)
+
+    assert mapped[0] == pytest.approx(expected.x)
+    assert mapped[1] == pytest.approx(expected.y)
 
 
 def test_canvas_tile_cache_and_future_paths(

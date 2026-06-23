@@ -6,7 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QCloseEvent,
     QColor,
@@ -18,6 +18,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QResizeEvent,
+    QTransform,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -74,6 +75,7 @@ LAND = QColor(22, 45, 59, 180)
 TRACK = QColor(45, 220, 255, 150)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
+GESTURE_SETTLE_MILLISECONDS = 60
 
 
 class TileSignals(QObject):
@@ -111,6 +113,11 @@ class MapCanvas(QWidget):
         self.tile_signals = TileSignals()
         self.tile_signals.loaded.connect(self._store_tile)
         self._last_drag_pos: QPoint | None = None
+        self._gesture_pixmap: QPixmap | None = None
+        self._gesture_viewport: Viewport | None = None
+        self._gesture_timer = QTimer(self)
+        self._gesture_timer.setSingleShot(True)
+        self._gesture_timer.timeout.connect(self.finish_gesture)
 
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
         self.set_prepared_tracks(tracks, prepare_tracks(tracks))
@@ -120,6 +127,7 @@ class MapCanvas(QWidget):
         tracks: tuple[ActivityTrack, ...],
         render_tracks: tuple[RenderTrack, ...],
     ) -> None:
+        self.finish_gesture()
         self.tracks = tracks
         self.render_tracks = render_tracks
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
@@ -127,6 +135,7 @@ class MapCanvas(QWidget):
         self.reset_view()
 
     def reset_view(self) -> None:
+        self.finish_gesture()
         self.viewport = fit_viewport(
             coordinate_bounds(all_points(self.tracks)),
             max(self.width(), 1),
@@ -135,28 +144,34 @@ class MapCanvas(QWidget):
         self.update()
 
     def set_track_opacity(self, value: int) -> None:
+        self.finish_gesture()
         self.track_opacity = value / 100.0
         self.update()
 
     def set_track_color(self, color: QColor) -> None:
         if not color.isValid():
             return
+        self.finish_gesture()
         self.track_color = QColor(color)
         self.update()
 
     def set_track_names_visible(self, visible: bool) -> None:
+        self.finish_gesture()
         self.track_names_visible = visible
         self.update()
 
     def set_tile_layer_enabled(self, enabled: bool) -> None:
+        self.finish_gesture()
         self.tile_layer_enabled = enabled
         self.update()
 
     def set_tile_opacity(self, value: int) -> None:
+        self.finish_gesture()
         self.tile_opacity = value / 100.0
         self.update()
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
+        self.finish_gesture()
         self.viewport = Viewport(
             center=self.viewport.center,
             zoom=self.viewport.zoom,
@@ -169,6 +184,7 @@ class MapCanvas(QWidget):
         if event is None:
             return
         if event.button() == Qt.MouseButton.LeftButton:
+            self.begin_gesture()
             self._last_drag_pos = event.position().toPoint()
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
@@ -187,6 +203,7 @@ class MapCanvas(QWidget):
             return
         if event.button() == Qt.MouseButton.LeftButton:
             self._last_drag_pos = None
+            self.finish_gesture()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -197,12 +214,14 @@ class MapCanvas(QWidget):
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         if event is None:
             return
+        self.begin_gesture()
         factor = 1.18 if event.angleDelta().y() > 0 else 1 / 1.18
         position = event.position()
         self.viewport = self.viewport.zoom_at(
             factor,
             ScreenPoint(position.x(), position.y()),
         )
+        self._gesture_timer.start(GESTURE_SETTLE_MILLISECONDS)
         self.update()
 
     def paintEvent(self, event: object) -> None:
@@ -212,6 +231,8 @@ class MapCanvas(QWidget):
         gradient.setColorAt(0.0, QColor("#08111f"))
         gradient.setColorAt(1.0, QColor("#0d1f2c"))
         painter.fillRect(self.rect(), gradient)
+        if self._draw_gesture_cache(painter):
+            return
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
         self._draw_tracks(painter)
@@ -224,6 +245,30 @@ class MapCanvas(QWidget):
         pixmap.fill(BACKGROUND)
         self.render(pixmap)
         return pixmap
+
+    def begin_gesture(self) -> None:
+        if self._gesture_pixmap is not None:
+            return
+        self._gesture_viewport = self.viewport
+        self._gesture_pixmap = self.render_to_pixmap()
+
+    def finish_gesture(self) -> None:
+        self._gesture_timer.stop()
+        self._gesture_pixmap = None
+        self._gesture_viewport = None
+        self.update()
+
+    def _draw_gesture_cache(self, painter: QPainter) -> bool:
+        if self._gesture_pixmap is None or self._gesture_viewport is None:
+            return False
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.setWorldTransform(
+            gesture_transform(self._gesture_viewport, self.viewport)
+        )
+        painter.drawPixmap(0, 0, self._gesture_pixmap)
+        painter.restore()
+        return True
 
     def _draw_backdrop(self, painter: QPainter) -> None:
         painter.save()
@@ -697,6 +742,22 @@ def draw_polyline(painter: QPainter, points: list[ScreenPoint]) -> None:
         return
     for start, end in zip(points, points[1:], strict=False):
         painter.drawLine(QPointF(start.x, start.y), QPointF(end.x, end.y))
+
+
+def gesture_transform(source: Viewport, target: Viewport) -> QTransform:
+    scale = target.zoom / source.zoom
+    return QTransform(
+        scale,
+        0.0,
+        0.0,
+        scale,
+        (source.center.x - target.center.x) * target.zoom
+        + target.width / 2.0
+        - source.width / 2.0 * scale,
+        (source.center.y - target.center.y) * target.zoom
+        + target.height / 2.0
+        - source.height / 2.0 * scale,
+    )
 
 
 def rough_land_rects() -> tuple[tuple[float, float, float, float], ...]:

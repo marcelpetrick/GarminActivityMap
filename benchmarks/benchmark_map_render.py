@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication
 
 from activity_map.geo import ProjectedPoint, ScreenPoint, Viewport, project_point
 from activity_map.models import ActivityTrack, TrackPoint
-from activity_map.render import prepare_tracks_parallel
+from activity_map.render import RenderTrack, prepare_tracks_parallel
 from activity_map.widgets import MapCanvas
 
 
@@ -141,7 +141,7 @@ def run_benchmarks(
     application = QApplication.instance() or QApplication([])
     tracks = synthetic_tracks(args.tracks, args.points_per_track, args.layout)
 
-    prepared = ()
+    prepared: tuple[RenderTrack, ...] = ()
 
     def prepare() -> None:
         nonlocal prepared
@@ -196,6 +196,28 @@ def run_benchmarks(
     results.append(
         measure_frames("deep-zoom wheel zoom", args.frames, zoom_frame, canvas)
     )
+
+    canvas.viewport = Viewport(
+        center=center,
+        zoom=1_000_000.0,
+        width=canvas.width(),
+        height=canvas.height(),
+    )
+    canvas.begin_gesture()
+    results.append(measure_frames("cached gesture pan", args.frames, pan_frame, canvas))
+    canvas.finish_gesture()
+
+    canvas.viewport = Viewport(
+        center=center,
+        zoom=1_000_000.0,
+        width=canvas.width(),
+        height=canvas.height(),
+    )
+    canvas.begin_gesture()
+    results.append(
+        measure_frames("cached gesture zoom", args.frames, zoom_frame, canvas)
+    )
+    canvas.finish_gesture()
     canvas.shutdown_tiles()
     del application
     return preparation_ms, set_tracks_ms, results

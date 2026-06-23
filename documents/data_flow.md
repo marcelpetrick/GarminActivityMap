@@ -94,21 +94,22 @@ sequenceDiagram
   Canvas-->>Window: first repaint requested
 
   User->>Canvas: drag or wheel event
+  Canvas->>Canvas: capture current full-quality raster once
   Canvas->>Canvas: update immutable Viewport
   Canvas->>Qt: update() schedules paint
   Qt->>Canvas: paintEvent()
-  Canvas->>Tiles: request missing tiles asynchronously
-  Canvas->>Qt: draw backdrop and cached tiles
-  loop Every render track
-    Canvas->>Canvas: select geometry for zoom
-    loop Every point in selected geometry
-      Canvas->>Canvas: allocate ScreenPoint from world_to_screen
+  alt Gesture is active
+    Canvas->>Qt: affine-transform cached raster
+  else Gesture settled
+    Canvas->>Tiles: request missing tiles asynchronously
+    Canvas->>Canvas: query spatial index
+    Canvas->>Canvas: select screen-space LOD and point budget
+    Canvas->>Qt: draw backdrop and cached tiles
+    loop Every visible retained track
+      Canvas->>Qt: draw retained QPainterPath
     end
-    loop Every adjacent point pair
-      Canvas->>Qt: drawLine()
-    end
+    Canvas->>Qt: draw labels, scale, attribution
   end
-  Canvas->>Qt: draw labels, scale, attribution
   Qt-->>User: completed frame
 ```
 
