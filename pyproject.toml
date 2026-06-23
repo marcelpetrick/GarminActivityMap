@@ -1,10 +1,11 @@
 [project]
 name = "garmin-visualize-all-activities"
-version = "0.0.41"
+version = "0.0.42"
 description = "Local Garmin Connect activity exporter"
 requires-python = ">=3.11"
 dependencies = [
-  "garminconnect==0.3.5",
+  "garminconnect==0.3.5; python_version < '3.12'",
+  "garminconnect==0.3.6; python_version >= '3.12'",
   "curl-cffi==0.15.0",
   "PyQt6==6.11.0",
   "PyQt6-Qt6==6.11.1",
@@ -21,12 +22,13 @@ include = ["activity_map*", "garmin_export*"]
 [project.optional-dependencies]
 dev = [
   "build==1.5.0",
+  "coverage==7.14.3",
   "mypy==2.1.0",
   "pytest-cov==7.1.0",
   "pytest-qt==4.5.0",
-  "pytest==9.0.3",
+  "pytest==9.1.1",
   "radon==6.0.1",
-  "ruff==0.15.17",
+  "ruff==0.15.18",
   "vulture==2.16",
 ]
 
