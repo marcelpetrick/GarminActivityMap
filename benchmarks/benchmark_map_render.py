@@ -29,6 +29,8 @@ class BenchmarkResult:
     frames_per_second: float
     visible_tracks: int
     path_draw_calls: int
+    selected_points: int
+    lod_tolerance: float
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -40,6 +42,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--frames", type=positive_int, default=12)
     parser.add_argument("--width", type=positive_int, default=1_200)
     parser.add_argument("--height", type=positive_int, default=760)
+    parser.add_argument(
+        "--layout",
+        choices=("distributed", "overlap"),
+        default="distributed",
+    )
     return parser.parse_args(argv)
 
 
@@ -53,17 +60,24 @@ def positive_int(value: str) -> int:
 def synthetic_tracks(
     track_count: int,
     points_per_track: int,
+    layout: str = "distributed",
 ) -> tuple[ActivityTrack, ...]:
     tracks: list[ActivityTrack] = []
     for track_index in range(track_count):
-        base_latitude = 52.20 + (track_index % 40) * 0.015
-        base_longitude = 13.00 + (track_index // 40) * 0.015
+        if layout == "overlap":
+            base_latitude = 52.50 + (track_index % 10) * 0.00001
+            base_longitude = 13.40 + ((track_index // 10) % 10) * 0.00001
+            point_step = 0.000002
+        else:
+            base_latitude = 52.20 + (track_index % 40) * 0.015
+            base_longitude = 13.00 + (track_index // 40) * 0.015
+            point_step = 0.00002
         points = tuple(
             TrackPoint(
-                latitude=base_latitude + point_index * 0.00002,
+                latitude=base_latitude + point_index * point_step,
                 longitude=(
                     base_longitude
-                    + point_index * 0.000025
+                    + point_index * point_step * 1.25
                     + ((point_index % 20) - 10) * 0.000003
                 ),
             )
@@ -105,6 +119,8 @@ def measure_frames(
         frames_per_second=1_000.0 / median_ms,
         visible_tracks=canvas.last_visible_track_count,
         path_draw_calls=canvas.last_path_draw_calls,
+        selected_points=canvas.last_selected_point_count,
+        lod_tolerance=canvas.last_lod_tolerance,
     )
 
 
@@ -122,7 +138,7 @@ def run_benchmarks(
     args: argparse.Namespace,
 ) -> tuple[float, float, list[BenchmarkResult]]:
     application = QApplication.instance() or QApplication([])
-    tracks = synthetic_tracks(args.tracks, args.points_per_track)
+    tracks = synthetic_tracks(args.tracks, args.points_per_track, args.layout)
 
     preparation_ms = timed(lambda: prepare_tracks(tracks))
     canvas = MapCanvas()
@@ -144,7 +160,7 @@ def run_benchmarks(
             canvas,
         ),
         measure_frames(
-            "deep zoom (full geometry)",
+            "deep zoom (adaptive LOD)",
             args.frames,
             lambda: render_at_zoom(canvas, center, 1_000_000.0),
             canvas,
@@ -193,18 +209,23 @@ def print_report(
     print(f"- Points per track: {args.points_per_track:,}")
     print(f"- Total source points: {total_points:,}")
     print(f"- Canvas: {args.width} × {args.height}")
+    print(f"- Layout: {args.layout}")
     print(f"- Samples per scenario: {args.frames}")
     print(f"- `prepare_tracks`: {preparation_ms:.2f} ms")
     print(f"- `MapCanvas.set_tracks`: {set_tracks_ms:.2f} ms")
     print()
-    print("| Scenario | Median | p95 | Maximum | Median FPS | Visible | Path calls |")
-    print("|---|---:|---:|---:|---:|---:|---:|")
+    print(
+        "| Scenario | Median | p95 | Maximum | Median FPS | Visible "
+        "| Path calls | Points | LOD tolerance |"
+    )
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for result in results:
         print(
             f"| {result.scenario} | {result.median_ms:.2f} ms "
             f"| {result.p95_ms:.2f} ms | {result.maximum_ms:.2f} ms "
             f"| {result.frames_per_second:.1f} | {result.visible_tracks:,} "
-            f"| {result.path_draw_calls:,} |"
+            f"| {result.path_draw_calls:,} | {result.selected_points:,} "
+            f"| {result.lod_tolerance:g} |"
         )
 
 

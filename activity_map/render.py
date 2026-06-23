@@ -24,6 +24,13 @@ class ProjectedBounds:
 
 
 @dataclass(frozen=True, slots=True)
+class RenderLevel:
+    tolerance_world: float
+    segments: tuple[tuple[ProjectedPoint, ...], ...]
+    point_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class RenderTrack:
     activity_id: str
     name: str
@@ -32,6 +39,7 @@ class RenderTrack:
     marker: ProjectedPoint
     label_anchor: ProjectedPoint | None
     bounds: ProjectedBounds
+    levels: tuple[RenderLevel, ...]
 
 
 MAX_CONTINUOUS_SEGMENT_METERS = 5_000.0
@@ -39,6 +47,7 @@ MIN_RENDERED_TRACK_POINTS = 3
 MARKER_MAX_ZOOM = 8_000.0
 SIMPLIFIED_MAX_ZOOM = 120_000.0
 SIMPLIFICATION_TOLERANCE = 0.00002
+LOD_TOLERANCES = (0.00008, SIMPLIFICATION_TOLERANCE, 0.000005, 0.000001)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +75,7 @@ def prepare_track(
     simplified = tuple(
         simplify_polyline(segment, SIMPLIFICATION_TOLERANCE) for segment in segments
     )
+    levels = prepare_levels(segments, simplified)
     marker = project_point(
         TrackPoint(
             latitude=sum(point.latitude for point in track.points) / len(track.points),
@@ -86,6 +96,7 @@ def prepare_track(
         marker=marker,
         label_anchor=label_anchor,
         bounds=bounds,
+        levels=levels,
     )
 
 
@@ -190,3 +201,31 @@ def projected_bounds(
         min_y=min(point.y for point in points),
         max_y=max(point.y for point in points),
     )
+
+
+def prepare_levels(
+    segments: tuple[tuple[ProjectedPoint, ...], ...],
+    simplified_segments: tuple[tuple[ProjectedPoint, ...], ...],
+) -> tuple[RenderLevel, ...]:
+    levels: list[RenderLevel] = []
+    for tolerance in LOD_TOLERANCES:
+        level_segments = (
+            simplified_segments
+            if tolerance == SIMPLIFICATION_TOLERANCE
+            else tuple(simplify_polyline(segment, tolerance) for segment in segments)
+        )
+        levels.append(
+            RenderLevel(
+                tolerance_world=tolerance,
+                segments=level_segments,
+                point_count=sum(len(segment) for segment in level_segments),
+            )
+        )
+    levels.append(
+        RenderLevel(
+            tolerance_world=0.0,
+            segments=segments,
+            point_count=sum(len(segment) for segment in segments),
+        )
+    )
+    return tuple(levels)

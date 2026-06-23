@@ -46,11 +46,11 @@ from .geo import (
     project_point,
 )
 from .loader import load_directory
+from .lod import select_lod
 from .models import ActivityTrack, LoadReport, TrackPoint
 from .qt_render import RetainedTrackPaths, prepare_retained_paths, viewport_transform
 from .render import (
     MARKER_MAX_ZOOM,
-    SIMPLIFIED_MAX_ZOOM,
     RenderTrack,
     geometry_for_zoom,
     prepare_tracks,
@@ -91,6 +91,8 @@ class MapCanvas(QWidget):
         self.spatial_index = TrackSpatialIndex.build(())
         self.last_visible_track_count = 0
         self.last_path_draw_calls = 0
+        self.last_selected_point_count = 0
+        self.last_lod_tolerance = 0.0
         self.viewport = fit_viewport(None, 960, 540)
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
@@ -348,12 +350,20 @@ class MapCanvas(QWidget):
         self.last_path_draw_calls = 0
         if self.viewport.zoom > MARKER_MAX_ZOOM:
             painter.setWorldTransform(viewport_transform(self.viewport))
-            use_detailed = self.viewport.zoom > SIMPLIFIED_MAX_ZOOM
+            selection = select_lod(
+                self.render_tracks,
+                visible_indexes,
+                self.viewport.zoom,
+            )
+            self.last_selected_point_count = selection.point_count
+            self.last_lod_tolerance = selection.tolerance_world
             for index in visible_indexes:
                 paths = self.retained_track_paths[index]
-                painter.drawPath(paths.detailed if use_detailed else paths.simplified)
+                painter.drawPath(paths.levels[selection.level_index])
                 self.last_path_draw_calls += 1
         else:
+            self.last_selected_point_count = len(visible_indexes)
+            self.last_lod_tolerance = 0.0
             painter.setBrush(color)
             painter.setPen(Qt.PenStyle.NoPen)
             for index in visible_indexes:

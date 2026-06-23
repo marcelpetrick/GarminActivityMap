@@ -423,6 +423,38 @@ continue to cost about 4–7 ms. The next optimization should address datasets
 where many dense tracks overlap in the same visible region by selecting
 screen-space LOD from an explicit vertex budget.
 
+### Phase 3 — Screen-Space Multi-Level LOD
+
+Implemented in version `0.0.36`:
+
+- four simplified geometry levels plus full geometry retained per track;
+- LOD selected from projected tolerance multiplied by current zoom;
+- a 100,000-point visible-frame budget that progressively selects coarser
+  geometry when dense tracks overlap;
+- benchmark reporting for selected points and world-space LOD tolerance;
+- an overlap layout that keeps all 1,000 tracks inside the viewport.
+
+Distributed benchmark result:
+
+| Scenario | Phase 2 | Phase 3 | Selected points |
+|---|---:|---:|---:|
+| Detailed geometry | about 17 ms | about 5 ms | 312 |
+| Detailed pan | about 18 ms | about 6 ms | 360 |
+| Detailed wheel zoom | about 20 ms | about 6 ms | 280 |
+
+Dense-overlap result with all 1,000 tracks visible:
+
+| Scenario | Fixed full geometry | Adaptive LOD |
+|---|---:|---:|
+| Detailed geometry | about 85.5 ms | about 4.4 ms |
+| Detailed pan | comparable full-geometry cost | about 4.6 ms |
+| Detailed wheel zoom | comparable full-geometry cost | about 4.8 ms |
+
+Preparation rises to roughly 0.9–1.0 seconds because several retained levels
+are built. This deliberately spends memory and one-time compute to keep
+interaction below one display frame. Parallel/asynchronous preparation is the
+next work package so this increased load cost no longer freezes the GUI.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

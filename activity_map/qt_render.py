@@ -10,8 +10,15 @@ from .render import RenderTrack
 
 @dataclass(frozen=True, slots=True)
 class RetainedTrackPaths:
-    simplified: QPainterPath
-    detailed: QPainterPath
+    levels: tuple[QPainterPath, ...]
+
+    @property
+    def simplified(self) -> QPainterPath:
+        return self.levels[1]
+
+    @property
+    def detailed(self) -> QPainterPath:
+        return self.levels[-1]
 
 
 def prepare_retained_paths(
@@ -19,8 +26,7 @@ def prepare_retained_paths(
 ) -> tuple[RetainedTrackPaths, ...]:
     return tuple(
         RetainedTrackPaths(
-            simplified=polyline_path(track.simplified_segments),
-            detailed=polyline_path(track.segments),
+            levels=tuple(polyline_path(level.segments) for level in track.levels),
         )
         for track in tracks
     )

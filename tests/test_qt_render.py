@@ -45,6 +45,7 @@ def test_prepare_retained_paths_builds_both_zoom_tiers() -> None:
 
     assert len(retained) == 1
     assert retained[0].simplified.elementCount() < retained[0].detailed.elementCount()
+    assert len(retained[0].levels) == len(prepared[0].levels)
 
 
 def test_viewport_transform_matches_world_to_screen() -> None:
