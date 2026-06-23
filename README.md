@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.33`
+- Version: `0.0.34`
 - Runtime: Python 3.11+
 
 ## Usage Terms

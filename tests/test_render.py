@@ -37,6 +37,7 @@ def test_prepare_tracks_projects_track_points_once() -> None:
             project_point(TrackPoint(latitude=0.02, longitude=0.02)),
         ),
     )
+    assert prepared[0].label_anchor is not None
 
 
 def test_prepare_tracks_ignores_two_point_summary_only_tracks() -> None:

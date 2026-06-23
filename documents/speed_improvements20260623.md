@@ -369,6 +369,36 @@ Implement Phases 1 and 2 together as a contained renderer refactor:
 This work addresses the measured hot path directly and creates the seam needed
 for later parallel loading or a GPU backend.
 
+## Implementation Results
+
+### Phase 1 — Retained Paths and Transform-Based Painting
+
+Implemented in version `0.0.34`:
+
+- retained `QPainterPath` objects for simplified and detailed geometry;
+- one Qt path submission per track instead of one `drawLine` per edge;
+- one viewport `QTransform` applied by Qt instead of Python screen-coordinate
+  conversion for every point;
+- cosmetic pens so line width remains constant under the world transform;
+- cached label anchors.
+
+Synthetic benchmark result for 1,000 tracks × 300 points on the baseline
+machine:
+
+| Scenario | Before | After | Improvement |
+|---|---:|---:|---:|
+| Intermediate geometry | about 12 ms | about 4 ms | about 3× |
+| Detailed geometry | about 485 ms | about 66 ms | about 7.3× |
+| Detailed pan | about 488 ms | about 65 ms | about 7.5× |
+| Detailed wheel zoom | about 485 ms | about 67 ms | about 7.2× |
+
+`MapCanvas.set_tracks` increased from about 566 ms to about 733 ms because the
+retained paths are constructed once at load time. This is an explicit
+compute/memory trade: more preparation and retained geometry remove repeated
+per-frame Python work. The remaining detailed-frame cost is still above the
+33.3 ms 30-FPS budget, so viewport culling and spatial selection remain
+necessary.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

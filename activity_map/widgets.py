@@ -47,7 +47,15 @@ from .geo import (
 )
 from .loader import load_directory
 from .models import ActivityTrack, LoadReport, TrackPoint
-from .render import RenderTrack, geometry_for_zoom, prepare_tracks, track_label_anchor
+from .qt_render import RetainedTrackPaths, prepare_retained_paths, viewport_transform
+from .render import (
+    MARKER_MAX_ZOOM,
+    SIMPLIFIED_MAX_ZOOM,
+    RenderTrack,
+    geometry_for_zoom,
+    prepare_tracks,
+    track_label_anchor,
+)
 from .settings import SettingsStore
 from .tiles import (
     OSM_ATTRIBUTION,
@@ -78,6 +86,7 @@ class MapCanvas(QWidget):
         self.setMouseTracking(True)
         self.tracks: tuple[ActivityTrack, ...] = ()
         self.render_tracks: tuple[RenderTrack, ...] = ()
+        self.retained_track_paths: tuple[RetainedTrackPaths, ...] = ()
         self.viewport = fit_viewport(None, 960, 540)
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
@@ -95,6 +104,7 @@ class MapCanvas(QWidget):
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
         self.tracks = tracks
         self.render_tracks = prepare_tracks(tracks)
+        self.retained_track_paths = prepare_retained_paths(self.render_tracks)
         self.reset_view()
 
     def reset_view(self) -> None:
@@ -323,21 +333,24 @@ class MapCanvas(QWidget):
         if not self.render_tracks or self.track_opacity <= 0:
             return
         painter.save()
-        for track in self.render_tracks:
-            color = QColor(self.track_color)
-            color.setAlpha(int(210 * self.track_opacity))
-            painter.setPen(QPen(color, 2.2, Qt.PenStyle.SolidLine))
-            geometry = geometry_for_zoom(track, self.viewport.zoom)
-            for segment in geometry.polylines:
-                draw_polyline(
-                    painter,
-                    [self.viewport.world_to_screen(point) for point in segment],
-                )
+        color = QColor(self.track_color)
+        color.setAlpha(int(210 * self.track_opacity))
+        pen = QPen(color, 2.2, Qt.PenStyle.SolidLine)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        if self.viewport.zoom > MARKER_MAX_ZOOM:
+            painter.setWorldTransform(viewport_transform(self.viewport))
+            use_detailed = self.viewport.zoom > SIMPLIFIED_MAX_ZOOM
+            for paths in self.retained_track_paths:
+                painter.drawPath(paths.detailed if use_detailed else paths.simplified)
+        else:
             painter.setBrush(color)
             painter.setPen(Qt.PenStyle.NoPen)
-            for marker in geometry.markers:
-                screen = self.viewport.world_to_screen(marker)
-                painter.drawEllipse(QPointF(screen.x, screen.y), 3.0, 3.0)
+            for track in self.render_tracks:
+                geometry = geometry_for_zoom(track, self.viewport.zoom)
+                for marker in geometry.markers:
+                    screen = self.viewport.world_to_screen(marker)
+                    painter.drawEllipse(QPointF(screen.x, screen.y), 3.0, 3.0)
         painter.restore()
 
     def _draw_track_names(self, painter: QPainter) -> None:

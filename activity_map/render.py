@@ -14,6 +14,7 @@ class RenderTrack:
     segments: tuple[tuple[ProjectedPoint, ...], ...]
     simplified_segments: tuple[tuple[ProjectedPoint, ...], ...]
     marker: ProjectedPoint
+    label_anchor: ProjectedPoint | None
 
 
 MAX_CONTINUOUS_SEGMENT_METERS = 5_000.0
@@ -56,12 +57,14 @@ def prepare_track(
             ),
         )
     )
+    label_anchor = segment_label_anchor(segments)
     return RenderTrack(
         activity_id=track.activity_id,
         name=track.name,
         segments=segments,
         simplified_segments=simplified,
         marker=marker,
+        label_anchor=label_anchor,
     )
 
 
@@ -139,7 +142,13 @@ def split_projected_segments(
 
 
 def track_label_anchor(track: RenderTrack) -> ProjectedPoint | None:
-    points = [point for segment in track.segments for point in segment]
+    return track.label_anchor
+
+
+def segment_label_anchor(
+    segments: tuple[tuple[ProjectedPoint, ...], ...],
+) -> ProjectedPoint | None:
+    points = [point for segment in segments for point in segment]
     if not points:
         return None
     return ProjectedPoint(
