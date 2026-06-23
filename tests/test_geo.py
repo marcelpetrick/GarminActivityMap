@@ -9,6 +9,7 @@ from activity_map.geo import (
     choose_scale_bar,
     clamp_zoom,
     coordinate_bounds,
+    fit_projected_viewport,
     fit_viewport,
     format_scale_distance,
     haversine_distance_meters,
@@ -75,6 +76,13 @@ def test_fit_viewport_centers_bounds_in_screen() -> None:
 
     assert center_screen.x == pytest.approx(400.0, abs=2.0)
     assert center_screen.y == pytest.approx(250.0, abs=2.0)
+
+
+def test_fit_projected_viewport_uses_precomputed_world_bounds() -> None:
+    viewport = fit_projected_viewport(0.4, 0.6, 0.3, 0.5, 800, 600)
+
+    assert viewport.center == ProjectedPoint(0.5, 0.4)
+    assert viewport.zoom > 0
 
 
 def test_viewport_pan_and_zoom_at_preserve_anchor_world_position() -> None:

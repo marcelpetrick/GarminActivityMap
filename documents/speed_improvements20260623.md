@@ -516,6 +516,33 @@ paths, culling, and adaptive LOD already do that. Its value is stable immediate
 feedback during rapid input and avoiding redundant refined frames for wheel
 events that arrive faster than the display can present them.
 
+### Phase 6 — Remove Residual Full-Dataset Work
+
+Implemented in version `0.0.39`:
+
+- render segmentation reuses distances and validity already computed by the
+  loader instead of repeating haversine calculations;
+- marker coordinates are accumulated in one pass;
+- global map fitting combines prepared projected bounds instead of flattening
+  every source point;
+- synthetic grid geometry is retained as two world-space `QPainterPath`
+  objects and transformed by Qt.
+
+Measured effects:
+
+| Operation | Before | After |
+|---|---:|---:|
+| Validated render preparation, 1,000 × 300 | about 0.91 s | about 0.65 s |
+| GUI snapshot installation | about 111 ms | about 73 ms |
+| Intermediate refined frame | about 5.3 ms | about 2.2 ms |
+| Detailed refined frame | about 5.0 ms | about 2.3 ms |
+| Detailed refined pan | about 5.1 ms | about 2.6 ms |
+
+The remaining full-quality raster frame is comfortably below the 16.7 ms
+60-FPS budget on the reference system. At this point, further renderer
+replacement should be justified by new requirements such as perspective tilt,
+not by the original pan/zoom stutter.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

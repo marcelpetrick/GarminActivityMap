@@ -1,10 +1,14 @@
 from pathlib import Path
 
+import pytest
+
+import activity_map.render as render
 from activity_map.geo import project_point
 from activity_map.models import ActivityTrack, TrackPoint, TrackSegment
 from activity_map.render import (
     MARKER_MAX_ZOOM,
     SIMPLIFIED_MAX_ZOOM,
+    combined_projected_bounds,
     geometry_for_zoom,
     prepare_tracks,
     simplify_polyline,
@@ -39,6 +43,8 @@ def test_prepare_tracks_projects_track_points_once() -> None:
     )
     assert prepared[0].label_anchor is not None
     assert prepared[0].bounds.min_x <= prepared[0].bounds.max_x
+    assert combined_projected_bounds(prepared) == prepared[0].bounds
+    assert combined_projected_bounds(()) is None
 
 
 def test_prepare_tracks_ignores_two_point_summary_only_tracks() -> None:
@@ -155,3 +161,33 @@ def test_simplify_polyline_preserves_endpoints_and_significant_turns() -> None:
     assert simplified[0] == points[0]
     assert simplified[-1] == points[-1]
     assert points[2] in simplified
+
+
+def test_split_reuses_validated_segment_distances(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    points = (
+        TrackPoint(52.0, 13.0),
+        TrackPoint(52.001, 13.001),
+        TrackPoint(52.002, 13.002),
+    )
+    track = ActivityTrack(
+        activity_id="validated",
+        name="Validated",
+        source_file=Path("validated.json"),
+        points=points,
+        segments=(
+            TrackSegment(0, 1, 100.0, None, None, True),
+            TrackSegment(1, 2, 100.0, None, None, True),
+        ),
+    )
+    monkeypatch.setattr(
+        render,
+        "haversine_distance_meters",
+        lambda *_: pytest.fail("distance should be reused"),
+    )
+
+    segments = split_projected_segments(track, 5_000.0)
+
+    assert len(segments) == 1
+    assert len(segments[0]) == 3

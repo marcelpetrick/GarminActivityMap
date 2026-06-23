@@ -185,12 +185,12 @@ The current major costs are:
 | Phase | Current complexity | Thread | Important behavior |
 |---|---:|---|---|
 | Recursive file discovery and JSON parsing | `O(F + payload size)` | load worker | Sequential by measured default; does not block the window |
-| Segment validation and full projection | `O(P)` | load worker | Haversine distance is calculated during loading and again during render preparation |
+| Segment validation and full projection | `O(P)` | load worker | Loader-computed segment distances are reused during render preparation |
 | Simplification | Typical `O(P log P)`, worst `O(P²)` | load worker | Multiple retained levels; process mode remains optional |
-| Fit to tracks | `O(P)` | GUI | Re-flattens all source points despite per-track bounds already existing |
-| Broad/intermediate paint | `O(T + S)` | GUI | All tracks are visited even if off-screen |
-| Detailed paint | `O(T + S)` | GUI | `S` can equal `P`; one Python transform and nearly one Qt call per point/edge |
-| Labels | `O(T + P)` when enabled | GUI | `track_label_anchor` scans full detailed geometry every frame |
+| Fit to tracks | `O(T)` | GUI | Combines cached projected track bounds |
+| Broad/intermediate paint | `O(V + S)` | GUI | Spatial query, adaptive LOD, and retained path calls |
+| Detailed paint | `O(V + S)` | GUI | Visible geometry only; selected points are budgeted |
+| Labels | `O(V)` when enabled | GUI | Cached label anchors for visible tracks |
 | Tile fetch | Network/disk dependent | workers | Already asynchronous |
 
 ## Bottleneck Location

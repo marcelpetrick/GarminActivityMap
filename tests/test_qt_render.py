@@ -8,6 +8,7 @@ from activity_map.geo import ProjectedPoint, Viewport
 from activity_map.models import ActivityTrack, TrackPoint
 from activity_map.qt_render import (
     polyline_path,
+    prepare_backdrop_paths,
     prepare_retained_paths,
     viewport_transform,
 )
@@ -62,3 +63,12 @@ def test_viewport_transform_matches_world_to_screen() -> None:
 
     assert transformed[0] == pytest.approx(expected.x)
     assert transformed[1] == pytest.approx(expected.y)
+
+
+def test_backdrop_paths_are_retained_once() -> None:
+    first = prepare_backdrop_paths()
+    second = prepare_backdrop_paths()
+
+    assert first is second
+    assert first.grid.elementCount() > 0
+    assert first.equator.elementCount() > 0

@@ -225,6 +225,26 @@ def fit_viewport(
     max_x = max(point.x for point in corners)
     min_y = min(point.y for point in corners)
     max_y = max(point.y for point in corners)
+    return fit_projected_viewport(
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        width,
+        height,
+        padding_ratio,
+    )
+
+
+def fit_projected_viewport(
+    min_x: float,
+    max_x: float,
+    min_y: float,
+    max_y: float,
+    width: int,
+    height: int,
+    padding_ratio: float = 0.12,
+) -> Viewport:
     span_x = max(max_x - min_x, 1e-6)
     span_y = max(max_y - min_y, 1e-6)
     padded_width = max(width * (1.0 - padding_ratio * 2.0), 1.0)

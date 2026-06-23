@@ -40,7 +40,7 @@ from .geo import (
     ScreenPoint,
     Viewport,
     choose_scale_bar,
-    coordinate_bounds,
+    fit_projected_viewport,
     fit_viewport,
     format_scale_distance,
     latitude_from_projected_y,
@@ -49,10 +49,17 @@ from .geo import (
 from .loading import PreparedLoad, load_and_prepare_directory
 from .lod import select_lod
 from .models import ActivityTrack, LoadReport, TrackPoint
-from .qt_render import RetainedTrackPaths, prepare_retained_paths, viewport_transform
+from .qt_render import (
+    BackdropPaths,
+    RetainedTrackPaths,
+    prepare_backdrop_paths,
+    prepare_retained_paths,
+    viewport_transform,
+)
 from .render import (
     MARKER_MAX_ZOOM,
     RenderTrack,
+    combined_projected_bounds,
     geometry_for_zoom,
     prepare_tracks,
     track_label_anchor,
@@ -95,6 +102,7 @@ class MapCanvas(QWidget):
         self.tracks: tuple[ActivityTrack, ...] = ()
         self.render_tracks: tuple[RenderTrack, ...] = ()
         self.retained_track_paths: tuple[RetainedTrackPaths, ...] = ()
+        self.backdrop_paths: BackdropPaths = prepare_backdrop_paths()
         self.spatial_index = TrackSpatialIndex.build(())
         self.last_visible_track_count = 0
         self.last_path_draw_calls = 0
@@ -136,11 +144,20 @@ class MapCanvas(QWidget):
 
     def reset_view(self) -> None:
         self.finish_gesture()
-        self.viewport = fit_viewport(
-            coordinate_bounds(all_points(self.tracks)),
-            max(self.width(), 1),
-            max(self.height(), 1),
-        )
+        bounds = combined_projected_bounds(self.render_tracks)
+        if bounds is None:
+            self.viewport = fit_viewport(
+                None, max(self.width(), 1), max(self.height(), 1)
+            )
+        else:
+            self.viewport = fit_projected_viewport(
+                bounds.min_x,
+                bounds.max_x,
+                bounds.min_y,
+                bounds.max_y,
+                max(self.width(), 1),
+                max(self.height(), 1),
+            )
         self.update()
 
     def set_track_opacity(self, value: int) -> None:
@@ -272,22 +289,18 @@ class MapCanvas(QWidget):
 
     def _draw_backdrop(self, painter: QPainter) -> None:
         painter.save()
-        painter.setPen(QPen(GRID, 1))
-        for longitude in range(-180, 181, 30):
-            points = [
-                self.viewport.world_to_screen(project_point(TrackPoint(lat, longitude)))
-                for lat in range(-75, 76, 5)
-            ]
-            draw_polyline(painter, points)
+        painter.setWorldTransform(viewport_transform(self.viewport))
+        grid_pen = QPen(GRID, 1)
+        grid_pen.setCosmetic(True)
+        painter.setPen(grid_pen)
+        painter.drawPath(self.backdrop_paths.grid)
+        equator_pen = QPen(GRID_MAJOR, 1)
+        equator_pen.setCosmetic(True)
+        painter.setPen(equator_pen)
+        painter.drawPath(self.backdrop_paths.equator)
+        painter.restore()
 
-        for latitude in range(-60, 61, 30):
-            painter.setPen(QPen(GRID_MAJOR if latitude == 0 else GRID, 1))
-            points = [
-                self.viewport.world_to_screen(project_point(TrackPoint(latitude, lon)))
-                for lon in range(-180, 181, 5)
-            ]
-            draw_polyline(painter, points)
-
+        painter.save()
         painter.setBrush(LAND)
         painter.setPen(Qt.PenStyle.NoPen)
         for rect in rough_land_rects():
@@ -731,17 +744,6 @@ class MainWindow(QMainWindow):
         self.canvas.shutdown_tiles()
         if event is not None:
             super().closeEvent(event)
-
-
-def all_points(tracks: tuple[ActivityTrack, ...]) -> tuple[TrackPoint, ...]:
-    return tuple(point for track in tracks for point in track.points)
-
-
-def draw_polyline(painter: QPainter, points: list[ScreenPoint]) -> None:
-    if len(points) < 2:
-        return
-    for start, end in zip(points, points[1:], strict=False):
-        painter.drawLine(QPointF(start.x, start.y), QPointF(end.x, end.y))
 
 
 def gesture_transform(source: Viewport, target: Viewport) -> QTransform:

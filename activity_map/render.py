@@ -109,12 +109,15 @@ def prepare_track(
         simplify_polyline(segment, SIMPLIFICATION_TOLERANCE) for segment in segments
     )
     levels = prepare_levels(segments, simplified)
+    latitude_sum = 0.0
+    longitude_sum = 0.0
+    for point in track.points:
+        latitude_sum += point.latitude
+        longitude_sum += point.longitude
     marker = project_point(
         TrackPoint(
-            latitude=sum(point.latitude for point in track.points) / len(track.points),
-            longitude=(
-                sum(point.longitude for point in track.points) / len(track.points)
-            ),
+            latitude=latitude_sum / len(track.points),
+            longitude=longitude_sum / len(track.points),
         )
     )
     label_anchor = segment_label_anchor(segments)
@@ -186,13 +189,25 @@ def split_projected_segments(
     current: list[ProjectedPoint] = []
     previous = None
 
-    invalid_end_indexes = {
-        segment.end_index for segment in track.segments if not segment.valid
-    }
+    validated_segments = len(track.segments) == max(len(track.points) - 1, 0)
+    break_end_indexes = (
+        {
+            segment.end_index
+            for segment in track.segments
+            if not segment.valid
+            or segment.distance_meters > max_segment_distance_meters
+        }
+        if validated_segments
+        else set()
+    )
     for index, point in enumerate(track.points):
         if previous is not None and (
-            index in invalid_end_indexes
-            or haversine_distance_meters(previous, point) > max_segment_distance_meters
+            index in break_end_indexes
+            or (
+                not validated_segments
+                and haversine_distance_meters(previous, point)
+                > max_segment_distance_meters
+            )
         ):
             if len(current) >= 2:
                 segments.append(tuple(current))
@@ -262,3 +277,16 @@ def prepare_levels(
         )
     )
     return tuple(levels)
+
+
+def combined_projected_bounds(
+    tracks: tuple[RenderTrack, ...],
+) -> ProjectedBounds | None:
+    if not tracks:
+        return None
+    return ProjectedBounds(
+        min_x=min(track.bounds.min_x for track in tracks),
+        max_x=max(track.bounds.max_x for track in tracks),
+        min_y=min(track.bounds.min_y for track in tracks),
+        max_y=max(track.bounds.max_y for track in tracks),
+    )

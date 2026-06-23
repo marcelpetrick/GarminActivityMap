@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 from PyQt6.QtGui import QPainterPath, QTransform
 
-from .geo import ProjectedPoint, Viewport
+from .geo import ProjectedPoint, Viewport, project_point
+from .models import TrackPoint
 from .render import RenderTrack
 
 
@@ -19,6 +21,12 @@ class RetainedTrackPaths:
     @property
     def detailed(self) -> QPainterPath:
         return self.levels[-1]
+
+
+@dataclass(frozen=True, slots=True)
+class BackdropPaths:
+    grid: QPainterPath
+    equator: QPainterPath
 
 
 def prepare_retained_paths(
@@ -53,4 +61,30 @@ def viewport_transform(viewport: Viewport) -> QTransform:
         viewport.zoom,
         viewport.width / 2.0 - viewport.center.x * viewport.zoom,
         viewport.height / 2.0 - viewport.center.y * viewport.zoom,
+    )
+
+
+@lru_cache(maxsize=1)
+def prepare_backdrop_paths() -> BackdropPaths:
+    grid_segments: list[tuple[ProjectedPoint, ...]] = []
+    for longitude in range(-180, 181, 30):
+        grid_segments.append(
+            tuple(
+                project_point(TrackPoint(latitude, longitude))
+                for latitude in range(-75, 76, 5)
+            )
+        )
+    for latitude in (-60, -30, 30, 60):
+        grid_segments.append(
+            tuple(
+                project_point(TrackPoint(latitude, longitude))
+                for longitude in range(-180, 181, 5)
+            )
+        )
+    equator = tuple(
+        project_point(TrackPoint(0.0, longitude)) for longitude in range(-180, 181, 5)
+    )
+    return BackdropPaths(
+        grid=polyline_path(tuple(grid_segments)),
+        equator=polyline_path((equator,)),
     )
