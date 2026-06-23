@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.32`
+- Version: `0.0.33`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -227,6 +227,15 @@ python scripts/build_docs.py
 ```
 
 Generated documentation output is written to ignored `build/docs/`.
+
+The detailed map runtime flow and the 2026-06-23 performance review are in
+`documents/data_flow.md` and `documents/speed_improvements20260623.md`.
+Reproduce the synthetic 1,000-track rendering benchmark with:
+
+```bash
+QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
+  python benchmarks/benchmark_map_render.py --tracks 1000
+```
 
 ## Privacy
 
