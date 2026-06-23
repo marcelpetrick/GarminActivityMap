@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future
 from pathlib import Path
+from threading import Event
 
 import pytest
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QPoint, QPointF, Qt
@@ -11,6 +12,7 @@ from pytestqt.qtbot import QtBot
 
 import activity_map.widgets as widgets
 from activity_map.geo import ProjectedPoint, Viewport
+from activity_map.loading import PreparedLoad
 from activity_map.models import (
     ActivityTrack,
     LoadReport,
@@ -267,6 +269,7 @@ def test_main_window_dialogs_status_and_restore_paths(
         lambda *args: str(selected),
     )
     window.choose_directory()
+    qtbot.waitUntil(lambda: window.settings.last_track_directory == str(selected))
     assert window.settings.last_track_directory == str(selected)
 
     monkeypatch.setattr(
@@ -291,8 +294,13 @@ def test_main_window_dialogs_status_and_restore_paths(
         tracks=(),
         warnings=(LoadWarning(selected / "bad.json", "bad"),),
     )
-    monkeypatch.setattr(widgets, "load_directory", lambda _: warning_report)
+    monkeypatch.setattr(
+        widgets,
+        "load_and_prepare_directory",
+        lambda _: PreparedLoad(warning_report, ()),
+    )
     window.load_path(selected)
+    qtbot.waitUntil(lambda: window.report == warning_report)
     assert "files skipped" in window.warning_label.text()
 
     issue_track = ActivityTrack(
@@ -303,8 +311,13 @@ def test_main_window_dialogs_status_and_restore_paths(
         validation_messages=("issue",),
     )
     issue_report = LoadReport(selected, 1, (issue_track,), ())
-    monkeypatch.setattr(widgets, "load_directory", lambda _: issue_report)
+    monkeypatch.setattr(
+        widgets,
+        "load_and_prepare_directory",
+        lambda _: PreparedLoad(issue_report, ()),
+    )
     window.load_path(selected)
+    qtbot.waitUntil(lambda: window.report == issue_report)
     assert window.warning_label.text() == "1 track validation issues"
 
     window.settings.last_track_directory = None
@@ -314,3 +327,30 @@ def test_main_window_dialogs_status_and_restore_paths(
     window.settings.last_track_directory = str(selected)
     window.load_last_directory()
     window.closeEvent(None)
+
+
+def test_main_window_load_path_is_non_blocking(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = Event()
+    release = Event()
+    report = LoadReport(tmp_path, 0, (), ())
+
+    def slow_load(_: Path) -> PreparedLoad:
+        started.set()
+        assert release.wait(timeout=2)
+        return PreparedLoad(report, ())
+
+    monkeypatch.setattr(widgets, "load_and_prepare_directory", slow_load)
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.load_path(tmp_path)
+
+    assert started.wait(timeout=1)
+    assert window.report is None
+    assert window.status_label.text().startswith("Loading ")
+    release.set()
+    qtbot.waitUntil(lambda: window.report == report)

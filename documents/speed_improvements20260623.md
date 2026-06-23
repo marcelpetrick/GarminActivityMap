@@ -455,6 +455,42 @@ are built. This deliberately spends memory and one-time compute to keep
 interaction below one display frame. Parallel/asynchronous preparation is the
 next work package so this increased load cost no longer freezes the GUI.
 
+### Phase 4 — Asynchronous Loading and Measured Parallelism
+
+Implemented in version `0.0.37`:
+
+- directory loading and pure render preparation submitted to a background
+  executor;
+- immutable prepared results returned through queued Qt signals;
+- generation tokens prevent stale loads from replacing newer selections;
+- retained Qt path creation remains on the GUI thread;
+- bounded threaded file loading and process-based preparation remain available
+  for explicit benchmarking;
+- a reproducible synthetic loading benchmark was added.
+
+Run:
+
+```bash
+python benchmarks/benchmark_loading.py \
+  --tracks 1000 \
+  --points-per-track 300
+```
+
+Measured results:
+
+| Dataset | Sequential load | 4 loader threads | Sequential preparation | 4 preparation processes |
+|---|---:|---:|---:|---:|
+| 1,000 × 300 | about 2.12 s | about 2.15 s | about 0.91 s | about 1.94 s |
+| 2,000 × 300 | about 3.90 s | about 3.89 s | about 1.70 s | about 4.29 s |
+
+The measurements do not justify enabling multi-worker throughput by default on
+this machine. JSON traversal remains partly GIL-bound, local SSD reads are not
+latency-bound enough to benefit from four threads, and serializing the
+multi-level object graph dominates process preparation. The production default
+therefore uses one background worker: wall-clock load time is similar, but the
+window remains interactive and can continue repainting. Parallel modes stay
+available for other storage/CPU environments and future compact-array models.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

@@ -45,7 +45,7 @@ from .geo import (
     latitude_from_projected_y,
     project_point,
 )
-from .loader import load_directory
+from .loading import PreparedLoad, load_and_prepare_directory
 from .lod import select_lod
 from .models import ActivityTrack, LoadReport, TrackPoint
 from .qt_render import RetainedTrackPaths, prepare_retained_paths, viewport_transform
@@ -80,6 +80,11 @@ class TileSignals(QObject):
     loaded = pyqtSignal(object, bytes)
 
 
+class LoadSignals(QObject):
+    completed = pyqtSignal(int, object)
+    failed = pyqtSignal(int, str)
+
+
 class MapCanvas(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -108,8 +113,15 @@ class MapCanvas(QWidget):
         self._last_drag_pos: QPoint | None = None
 
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
+        self.set_prepared_tracks(tracks, prepare_tracks(tracks))
+
+    def set_prepared_tracks(
+        self,
+        tracks: tuple[ActivityTrack, ...],
+        render_tracks: tuple[RenderTrack, ...],
+    ) -> None:
         self.tracks = tracks
-        self.render_tracks = prepare_tracks(tracks)
+        self.render_tracks = render_tracks
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
         self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
         self.reset_view()
@@ -453,6 +465,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Garmin Activity Map {__version__}")
         self.resize(1200, 760)
         self.report: LoadReport | None = None
+        self.load_executor = ThreadPoolExecutor(max_workers=1)
+        self.load_signals = LoadSignals()
+        self.load_signals.completed.connect(self._apply_load_result)
+        self.load_signals.failed.connect(self._apply_load_failure)
+        self._load_generation = 0
         self.settings_store = settings_store or SettingsStore()
         self.settings = self.settings_store.load()
         self.settings.last_run_timestamp = (
@@ -568,8 +585,37 @@ class MainWindow(QMainWindow):
             update_legend_swatch(self.track_legend_swatch, self.canvas.track_color)
 
     def load_path(self, path: Path) -> None:
-        self.report = load_directory(path)
-        self.canvas.set_tracks(self.report.tracks)
+        self._load_generation += 1
+        generation = self._load_generation
+        self.status_label.setText(f"Loading {path}...")
+        self.warning_label.setText("")
+        future = self.load_executor.submit(load_and_prepare_directory, path)
+        future.add_done_callback(self._load_result_callback(generation))
+
+    def load_path_sync(self, path: Path) -> None:
+        self._load_generation += 1
+        result = load_and_prepare_directory(path)
+        self._apply_load_result(self._load_generation, result)
+
+    def _load_result_callback(
+        self,
+        generation: int,
+    ) -> Callable[[Future[PreparedLoad]], None]:
+        def callback(future: Future[PreparedLoad]) -> None:
+            try:
+                result = future.result()
+            except Exception as exc:
+                self.load_signals.failed.emit(generation, str(exc))
+                return
+            self.load_signals.completed.emit(generation, result)
+
+        return callback
+
+    def _apply_load_result(self, generation: int, result: PreparedLoad) -> None:
+        if generation != self._load_generation:
+            return
+        self.report = result.report
+        self.canvas.set_prepared_tracks(self.report.tracks, result.render_tracks)
         self.status_label.setText(
             f"{len(self.report.tracks)} tracks, "
             f"{self.report.point_count} points, "
@@ -586,8 +632,14 @@ class MainWindow(QMainWindow):
             )
         else:
             self.warning_label.setText("No warnings")
-        self.settings.last_track_directory = str(path)
+        self.settings.last_track_directory = str(self.report.root)
         self.save_settings()
+
+    def _apply_load_failure(self, generation: int, message: str) -> None:
+        if generation != self._load_generation:
+            return
+        self.status_label.setText("Load failed")
+        self.warning_label.setText(message)
 
     def load_last_directory(self) -> None:
         if self.settings.last_track_directory is None:
@@ -629,6 +681,8 @@ class MainWindow(QMainWindow):
         self.settings_store.save(self.settings)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
+        self._load_generation += 1
+        self.load_executor.shutdown(wait=False, cancel_futures=True)
         self.canvas.shutdown_tiles()
         if event is not None:
             super().closeEvent(event)

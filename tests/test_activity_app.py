@@ -63,6 +63,7 @@ def test_main_window_loads_directory_and_renders_nonblank_map(
     qtbot.addWidget(window)
 
     window.load_path(tmp_path)
+    qtbot.waitUntil(lambda: window.report is not None)
     window.resize(960, 640)
     window.show()
     qtbot.waitExposed(window)

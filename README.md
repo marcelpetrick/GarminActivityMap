@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.36`
+- Version: `0.0.37`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -235,6 +235,12 @@ Reproduce the synthetic 1,000-track rendering benchmark with:
 ```bash
 QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
   python benchmarks/benchmark_map_render.py --tracks 1000
+```
+
+Benchmark sequential versus parallel file loading and render preparation with:
+
+```bash
+python benchmarks/benchmark_loading.py --tracks 1000 --points-per-track 300
 ```
 
 ## Privacy

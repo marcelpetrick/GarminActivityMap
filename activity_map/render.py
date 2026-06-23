@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 from .geo import ProjectedPoint, haversine_distance_meters, project_point
@@ -65,6 +67,37 @@ def prepare_tracks(
         for track in tracks
         if len(track.points) >= MIN_RENDERED_TRACK_POINTS
     )
+
+
+def prepare_tracks_parallel(
+    tracks: tuple[ActivityTrack, ...],
+    max_segment_distance_meters: float = MAX_CONTINUOUS_SEGMENT_METERS,
+    workers: int | None = None,
+) -> tuple[RenderTrack, ...]:
+    eligible = tuple(
+        track for track in tracks if len(track.points) >= MIN_RENDERED_TRACK_POINTS
+    )
+    if not eligible:
+        return ()
+    worker_count = workers or min(max(os.cpu_count() or 1, 1), 4)
+    worker_count = min(max(worker_count, 1), len(eligible))
+    if worker_count == 1:
+        return prepare_tracks(eligible, max_segment_distance_meters)
+    chunk_size = math.ceil(len(eligible) / worker_count)
+    chunks = tuple(
+        (eligible[start : start + chunk_size], max_segment_distance_meters)
+        for start in range(0, len(eligible), chunk_size)
+    )
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        prepared_chunks = executor.map(prepare_track_chunk, chunks)
+        return tuple(track for chunk in prepared_chunks for track in chunk)
+
+
+def prepare_track_chunk(
+    work: tuple[tuple[ActivityTrack, ...], float],
+) -> tuple[RenderTrack, ...]:
+    tracks, max_segment_distance_meters = work
+    return tuple(prepare_track(track, max_segment_distance_meters) for track in tracks)
 
 
 def prepare_track(

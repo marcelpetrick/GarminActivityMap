@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -62,9 +63,24 @@ def load_directory(
     root: Path,
     max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
 ) -> LoadReport:
+    return load_directory_with_workers(root, max_speed_kmh, workers=1)
+
+
+def load_directory_parallel(
+    root: Path,
+    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    workers: int = 4,
+) -> LoadReport:
+    return load_directory_with_workers(root, max_speed_kmh, workers=max(workers, 1))
+
+
+def load_directory_with_workers(
+    root: Path,
+    max_speed_kmh: float,
+    workers: int,
+) -> LoadReport:
     warnings: list[LoadWarning] = []
     tracks: list[ActivityTrack] = []
-    files_read = 0
 
     if not root.exists():
         return LoadReport(
@@ -74,27 +90,55 @@ def load_directory(
             warnings=(LoadWarning(root, "Directory does not exist"),),
         )
 
-    for file_path in sorted(root.rglob("*.json")):
-        if file_path.name == "manifest.json":
-            continue
-        files_read += 1
-        try:
-            track = load_activity_file(file_path, max_speed_kmh=max_speed_kmh)
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            warnings.append(LoadWarning(file_path, str(exc)))
-            continue
+    files = tuple(
+        file_path
+        for file_path in sorted(root.rglob("*.json"))
+        if file_path.name != "manifest.json"
+    )
+    if workers == 1:
+        results = tuple(
+            load_activity_result(file_path, max_speed_kmh) for file_path in files
+        )
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = tuple(
+                executor.map(
+                    load_activity_result_from_work,
+                    ((file_path, max_speed_kmh) for file_path in files),
+                )
+            )
 
-        if track is None:
-            warnings.append(LoadWarning(file_path, "No track points found"))
-            continue
-        tracks.append(track)
+    for track, warning in results:
+        if warning is not None:
+            warnings.append(warning)
+        elif track is not None:
+            tracks.append(track)
 
     return LoadReport(
         root=root,
-        files_read=files_read,
+        files_read=len(files),
         tracks=tuple(tracks),
         warnings=tuple(warnings),
     )
+
+
+def load_activity_result_from_work(
+    work: tuple[Path, float],
+) -> tuple[ActivityTrack | None, LoadWarning | None]:
+    return load_activity_result(*work)
+
+
+def load_activity_result(
+    file_path: Path,
+    max_speed_kmh: float,
+) -> tuple[ActivityTrack | None, LoadWarning | None]:
+    try:
+        track = load_activity_file(file_path, max_speed_kmh=max_speed_kmh)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, LoadWarning(file_path, str(exc))
+    if track is None:
+        return None, LoadWarning(file_path, "No track points found")
+    return track, None
 
 
 def load_activity_file(

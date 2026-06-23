@@ -55,9 +55,11 @@ flowchart LR
   O --> S
 ```
 
-Loading and render preparation are synchronous. `MainWindow.load_path` calls
-`load_directory`, then `MapCanvas.set_tracks`, on the GUI thread. The window
-cannot process interaction or repaint events until both operations complete.
+Loading and pure render preparation run asynchronously through a single
+background load executor. The GUI thread immediately displays loading state,
+continues processing input and paint events, and accepts the immutable
+`PreparedLoad` result through a queued Qt signal. Retained `QPainterPath`
+creation and snapshot installation remain on the GUI thread.
 
 ## Current Runtime Sequence
 
@@ -65,6 +67,7 @@ cannot process interaction or repaint events until both operations complete.
 sequenceDiagram
   actor User
   participant Window as MainWindow / GUI thread
+  participant Worker as Background load executor
   participant Loader as activity_map.loader
   participant Render as activity_map.render
   participant Canvas as MapCanvas / GUI thread
@@ -72,20 +75,22 @@ sequenceDiagram
   participant Qt as QPainter
 
   User->>Window: Open directory
-  Window->>Loader: load_directory(path)
+  Window->>Worker: submit load_and_prepare_directory(path)
+  Worker->>Loader: load_directory(path)
   loop Every JSON file, sequentially
     Loader->>Loader: read, decode, recursively inspect
     Loader->>Loader: validate every adjacent GPS segment
   end
-  Loader-->>Window: immutable ActivityTrack tuple
-  Window->>Canvas: set_tracks(tracks)
-  Canvas->>Render: prepare_tracks(tracks)
+  Loader-->>Worker: immutable ActivityTrack tuple
+  Worker->>Render: prepare_tracks(tracks)
   loop Every retained track, sequentially
     Render->>Render: project points and split segments
     Render->>Render: recursively simplify each segment
     Render->>Render: calculate marker
   end
-  Canvas->>Canvas: flatten all source points and fit viewport
+  Worker-->>Window: queued PreparedLoad signal
+  Window->>Canvas: set_prepared_tracks(tracks, render_tracks)
+  Canvas->>Canvas: build retained Qt paths and fit viewport
   Canvas-->>Window: first repaint requested
 
   User->>Canvas: drag or wheel event
@@ -107,9 +112,11 @@ sequenceDiagram
   Qt-->>User: completed frame
 ```
 
-The tile network and disk work is the only current parallel work. Track
-loading, projection, simplification, culling, screen transformation, and
-painting all execute serially on the GUI thread.
+Track loading and pure render preparation now execute away from the GUI thread.
+The loader and process-preparation APIs support multiple workers, but measured
+defaults remain one worker because four threads did not improve local SSD JSON
+loading and four processes were slower after serialization. Tile network and
+disk work continues in its independent four-worker pool.
 
 ## Module and Thread Boundaries
 
@@ -129,6 +136,11 @@ flowchart TB
     TC[activity_map.tiles.TileCache.fetch_tile]
   end
 
+  subgraph LOAD["Background load executor"]
+    LC[activity_map.loading]
+    LP[loader and pure render preparation]
+  end
+
   subgraph STORAGE["Local storage"]
     J[(Activity JSON)]
     TI[(OSM tile cache)]
@@ -137,6 +149,8 @@ flowchart TB
 
   APP --> W
   W --> L
+  W --> LC
+  LC --> LP
   J --> L
   W --> C
   C --> R
@@ -169,9 +183,9 @@ The current major costs are:
 
 | Phase | Current complexity | Thread | Important behavior |
 |---|---:|---|---|
-| Recursive file discovery and JSON parsing | `O(F + payload size)` | GUI | Sequential; blocks the window |
-| Segment validation and full projection | `O(P)` | GUI | Haversine distance is calculated during loading and again during render preparation |
-| Simplification | Typical `O(P log P)`, worst `O(P²)` | GUI | Recursive Python implementation and tuple slicing |
+| Recursive file discovery and JSON parsing | `O(F + payload size)` | load worker | Sequential by measured default; does not block the window |
+| Segment validation and full projection | `O(P)` | load worker | Haversine distance is calculated during loading and again during render preparation |
+| Simplification | Typical `O(P log P)`, worst `O(P²)` | load worker | Multiple retained levels; process mode remains optional |
 | Fit to tracks | `O(P)` | GUI | Re-flattens all source points despite per-track bounds already existing |
 | Broad/intermediate paint | `O(T + S)` | GUI | All tracks are visited even if off-screen |
 | Detailed paint | `O(T + S)` | GUI | `S` can equal `P`; one Python transform and nearly one Qt call per point/edge |

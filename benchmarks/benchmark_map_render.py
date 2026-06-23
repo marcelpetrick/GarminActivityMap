@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication
 
 from activity_map.geo import ProjectedPoint, ScreenPoint, Viewport, project_point
 from activity_map.models import ActivityTrack, TrackPoint
-from activity_map.render import prepare_tracks
+from activity_map.render import prepare_tracks_parallel
 from activity_map.widgets import MapCanvas
 
 
@@ -47,6 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=("distributed", "overlap"),
         default="distributed",
     )
+    parser.add_argument("--prepare-workers", type=positive_int, default=1)
     return parser.parse_args(argv)
 
 
@@ -140,10 +141,16 @@ def run_benchmarks(
     application = QApplication.instance() or QApplication([])
     tracks = synthetic_tracks(args.tracks, args.points_per_track, args.layout)
 
-    preparation_ms = timed(lambda: prepare_tracks(tracks))
+    prepared = ()
+
+    def prepare() -> None:
+        nonlocal prepared
+        prepared = prepare_tracks_parallel(tracks, workers=args.prepare_workers)
+
+    preparation_ms = timed(prepare)
     canvas = MapCanvas()
     canvas.resize(args.width, args.height)
-    set_tracks_ms = timed(lambda: canvas.set_tracks(tracks))
+    set_tracks_ms = timed(lambda: canvas.set_prepared_tracks(tracks, prepared))
     center = project_point(TrackPoint(52.50, 13.40))
 
     results = [
@@ -210,6 +217,7 @@ def print_report(
     print(f"- Total source points: {total_points:,}")
     print(f"- Canvas: {args.width} × {args.height}")
     print(f"- Layout: {args.layout}")
+    print(f"- Preparation workers: {args.prepare_workers}")
     print(f"- Samples per scenario: {args.frames}")
     print(f"- `prepare_tracks`: {preparation_ms:.2f} ms")
     print(f"- `MapCanvas.set_tracks`: {set_tracks_ms:.2f} ms")
