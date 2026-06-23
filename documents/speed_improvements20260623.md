@@ -604,6 +604,32 @@ as a separate renderer work package:
 The trigger for that project is the tilt feature itself or a future measured
 regression beyond the current frame budgets, not speculative optimization.
 
+## End-to-End Loading Regression and Correction
+
+Version `0.0.41` corrects a workflow regression introduced by asynchronous
+loading:
+
+- the optimized renderer waited for the complete archive before publishing any
+  tracks, leaving an empty but responsive map for about 34 seconds on the local
+  2,167-file archive;
+- selecting the same directory again invalidated the first generation and
+  queued a duplicate load, potentially doubling the empty interval;
+- synthetic benchmarks did not expose this because they measured completed
+  in-memory snapshots rather than time to first visible real track.
+
+The loader now publishes prepared batches of 50 tracks through queued signals.
+On the local archive, the first 50 tracks become visible in about 0.75 seconds,
+while all 1,783 renderable tracks complete in about 30 seconds. Duplicate
+requests for the active directory reuse the current job instead of invalidating
+or queueing it.
+
+The relevant end-to-end acceptance metrics are now:
+
+- time to first visible tracks;
+- final loaded/rendered counts;
+- duplicate reload behavior;
+- final frame time after the full archive is installed.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

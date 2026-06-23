@@ -90,6 +90,7 @@ class TileSignals(QObject):
 
 
 class LoadSignals(QObject):
+    progressed = pyqtSignal(int, object)
     completed = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
@@ -139,6 +140,18 @@ class MapCanvas(QWidget):
         self.tracks = tracks
         self.render_tracks = render_tracks
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
+        self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
+        self.reset_view()
+
+    def append_prepared_tracks(
+        self,
+        tracks: tuple[ActivityTrack, ...],
+        render_tracks: tuple[RenderTrack, ...],
+    ) -> None:
+        self.finish_gesture()
+        self.tracks += tracks
+        self.render_tracks += render_tracks
+        self.retained_track_paths += prepare_retained_paths(render_tracks)
         self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
         self.reset_view()
 
@@ -525,9 +538,12 @@ class MainWindow(QMainWindow):
         self.report: LoadReport | None = None
         self.load_executor = ThreadPoolExecutor(max_workers=1)
         self.load_signals = LoadSignals()
+        self.load_signals.progressed.connect(self._apply_load_progress)
         self.load_signals.completed.connect(self._apply_load_result)
         self.load_signals.failed.connect(self._apply_load_failure)
         self._load_generation = 0
+        self._active_load_path: Path | None = None
+        self._active_load_future: Future[PreparedLoad] | None = None
         self.settings_store = settings_store or SettingsStore()
         self.settings = self.settings_store.load()
         self.settings.last_run_timestamp = (
@@ -643,11 +659,29 @@ class MainWindow(QMainWindow):
             update_legend_swatch(self.track_legend_swatch, self.canvas.track_color)
 
     def load_path(self, path: Path) -> None:
+        resolved_path = path.resolve()
+        if (
+            self._active_load_path == resolved_path
+            and self._active_load_future is not None
+            and not self._active_load_future.done()
+        ):
+            self.status_label.setText(f"Still loading {path}...")
+            return
         self._load_generation += 1
         generation = self._load_generation
+        self._active_load_path = resolved_path
+        self.report = None
+        self.canvas.set_prepared_tracks((), ())
         self.status_label.setText(f"Loading {path}...")
         self.warning_label.setText("")
-        future = self.load_executor.submit(load_and_prepare_directory, path)
+        future = self.load_executor.submit(
+            load_and_prepare_directory,
+            path,
+            1,
+            1,
+            lambda result: self.load_signals.progressed.emit(generation, result),
+        )
+        self._active_load_future = future
         future.add_done_callback(self._load_result_callback(generation))
 
     def load_path_sync(self, path: Path) -> None:
@@ -673,7 +707,10 @@ class MainWindow(QMainWindow):
         if generation != self._load_generation:
             return
         self.report = result.report
-        self.canvas.set_prepared_tracks(self.report.tracks, result.render_tracks)
+        self._active_load_path = None
+        self._active_load_future = None
+        if not self.canvas.render_tracks:
+            self.canvas.set_prepared_tracks(self.report.tracks, result.render_tracks)
         self.status_label.setText(
             f"{len(self.report.tracks)} tracks, "
             f"{self.report.point_count} points, "
@@ -693,11 +730,24 @@ class MainWindow(QMainWindow):
         self.settings.last_track_directory = str(self.report.root)
         self.save_settings()
 
+    def _apply_load_progress(self, generation: int, result: PreparedLoad) -> None:
+        if generation != self._load_generation:
+            return
+        previous_count = len(self.canvas.tracks)
+        new_tracks = result.report.tracks[previous_count:]
+        self.canvas.append_prepared_tracks(new_tracks, result.render_tracks)
+        self.status_label.setText(
+            f"Loading... {len(result.report.tracks)} tracks, "
+            f"{result.report.point_count} points"
+        )
+
     def _apply_load_failure(self, generation: int, message: str) -> None:
         if generation != self._load_generation:
             return
         self.status_label.setText("Load failed")
         self.warning_label.setText(message)
+        self._active_load_path = None
+        self._active_load_future = None
 
     def load_last_directory(self) -> None:
         if self.settings.last_track_directory is None:

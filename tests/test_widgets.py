@@ -19,6 +19,7 @@ from activity_map.models import (
     LoadWarning,
     TrackPoint,
 )
+from activity_map.render import prepare_tracks
 from activity_map.tiles import TileCoordinate
 from activity_map.widgets import MainWindow, MapCanvas, gesture_transform
 
@@ -318,7 +319,7 @@ def test_main_window_dialogs_status_and_restore_paths(
     monkeypatch.setattr(
         widgets,
         "load_and_prepare_directory",
-        lambda _: PreparedLoad(warning_report, ()),
+        lambda *_args, **_kwargs: PreparedLoad(warning_report, ()),
     )
     window.load_path(selected)
     qtbot.waitUntil(lambda: window.report == warning_report)
@@ -335,7 +336,7 @@ def test_main_window_dialogs_status_and_restore_paths(
     monkeypatch.setattr(
         widgets,
         "load_and_prepare_directory",
-        lambda _: PreparedLoad(issue_report, ()),
+        lambda *_args, **_kwargs: PreparedLoad(issue_report, ()),
     )
     window.load_path(selected)
     qtbot.waitUntil(lambda: window.report == issue_report)
@@ -359,7 +360,7 @@ def test_main_window_load_path_is_non_blocking(
     release = Event()
     report = LoadReport(tmp_path, 0, (), ())
 
-    def slow_load(_: Path) -> PreparedLoad:
+    def slow_load(*_args: object, **_kwargs: object) -> PreparedLoad:
         started.set()
         assert release.wait(timeout=2)
         return PreparedLoad(report, ())
@@ -375,3 +376,69 @@ def test_main_window_load_path_is_non_blocking(
     assert window.status_label.text().startswith("Loading ")
     release.set()
     qtbot.waitUntil(lambda: window.report == report)
+
+
+def test_duplicate_load_request_does_not_queue_a_second_job(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = Event()
+    release = Event()
+    calls = 0
+    report = LoadReport(tmp_path, 0, (), ())
+
+    def slow_load(*_args: object, **_kwargs: object) -> PreparedLoad:
+        nonlocal calls
+        calls += 1
+        started.set()
+        assert release.wait(timeout=2)
+        return PreparedLoad(report, ())
+
+    monkeypatch.setattr(widgets, "load_and_prepare_directory", slow_load)
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.load_path(tmp_path)
+    assert started.wait(timeout=1)
+    window.load_path(tmp_path)
+
+    assert calls == 1
+    assert window.status_label.text().startswith("Still loading ")
+    release.set()
+    qtbot.waitUntil(lambda: window.report == report)
+
+
+def test_partial_load_progress_installs_tracks_before_completion(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = Event()
+    track = synthetic_track()
+    report = LoadReport(tmp_path, 1, (track,), ())
+    prepared = prepare_tracks((track,))
+
+    def progressive_load(
+        _path: Path,
+        _loader_workers: int,
+        _preparation_workers: int,
+        progress: object,
+    ) -> PreparedLoad:
+        assert callable(progress)
+        progress(PreparedLoad(report, prepared))
+        assert release.wait(timeout=2)
+        return PreparedLoad(report, prepared)
+
+    monkeypatch.setattr(widgets, "load_and_prepare_directory", progressive_load)
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.load_path(tmp_path)
+    qtbot.waitUntil(lambda: len(window.canvas.render_tracks) == 1)
+
+    assert window.report is None
+    assert window.status_label.text().startswith("Loading... 1 tracks")
+    release.set()
+    qtbot.waitUntil(lambda: window.report == report)
+    assert len(window.canvas.render_tracks) == 1

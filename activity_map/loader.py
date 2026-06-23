@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
@@ -57,6 +57,7 @@ ALTITUDE_METRIC_KEYS = frozenset(
     {"directElevation", "enhancedElevation", "altitude", "elevation"}
 )
 DEFAULT_MAX_SEGMENT_SPEED_KMH = 30.0
+DEFAULT_PROGRESS_BATCH_SIZE = 50
 
 
 def load_directory(
@@ -70,14 +71,24 @@ def load_directory_parallel(
     root: Path,
     max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
     workers: int = 4,
+    progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
+    progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
 ) -> LoadReport:
-    return load_directory_with_workers(root, max_speed_kmh, workers=max(workers, 1))
+    return load_directory_with_workers(
+        root,
+        max_speed_kmh,
+        workers=max(workers, 1),
+        progress=progress,
+        progress_batch_size=max(progress_batch_size, 1),
+    )
 
 
 def load_directory_with_workers(
     root: Path,
     max_speed_kmh: float,
     workers: int,
+    progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
+    progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
 ) -> LoadReport:
     warnings: list[LoadWarning] = []
     tracks: list[ActivityTrack] = []
@@ -96,23 +107,33 @@ def load_directory_with_workers(
         if file_path.name != "manifest.json"
     )
     if workers == 1:
-        results = tuple(
+        results: Iterable[tuple[ActivityTrack | None, LoadWarning | None]] = (
             load_activity_result(file_path, max_speed_kmh) for file_path in files
+        )
+        consume_load_results(
+            root,
+            len(files),
+            results,
+            tracks,
+            warnings,
+            progress,
+            progress_batch_size,
         )
     else:
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            results = tuple(
-                executor.map(
-                    load_activity_result_from_work,
-                    ((file_path, max_speed_kmh) for file_path in files),
-                )
+            results = executor.map(
+                load_activity_result_from_work,
+                ((file_path, max_speed_kmh) for file_path in files),
             )
-
-    for track, warning in results:
-        if warning is not None:
-            warnings.append(warning)
-        elif track is not None:
-            tracks.append(track)
+            consume_load_results(
+                root,
+                len(files),
+                results,
+                tracks,
+                warnings,
+                progress,
+                progress_batch_size,
+            )
 
     return LoadReport(
         root=root,
@@ -120,6 +141,35 @@ def load_directory_with_workers(
         tracks=tuple(tracks),
         warnings=tuple(warnings),
     )
+
+
+def consume_load_results(
+    root: Path,
+    files_read: int,
+    results: Iterable[tuple[ActivityTrack | None, LoadWarning | None]],
+    tracks: list[ActivityTrack],
+    warnings: list[LoadWarning],
+    progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None,
+    progress_batch_size: int,
+) -> None:
+    batch: list[ActivityTrack] = []
+    for track, warning in results:
+        if warning is not None:
+            warnings.append(warning)
+        elif track is not None:
+            tracks.append(track)
+            batch.append(track)
+        if progress is not None and len(batch) >= progress_batch_size:
+            progress(
+                LoadReport(root, files_read, tuple(tracks), tuple(warnings)),
+                tuple(batch),
+            )
+            batch.clear()
+    if progress is not None and batch:
+        progress(
+            LoadReport(root, files_read, tuple(tracks), tuple(warnings)),
+            tuple(batch),
+        )
 
 
 def load_activity_result_from_work(
