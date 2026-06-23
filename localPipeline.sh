@@ -44,10 +44,10 @@ lint() {
 static_analysis() {
   local complexity_output
   . .venv/bin/activate
-  python -m mypy activity_map garmin_export tests
+  python -m mypy activity_map garmin_export tests benchmarks || return 1
   python -m vulture activity_map garmin_export scripts tests \
     --min-confidence 90 \
-    --ignore-names sortorder,prompt
+    --ignore-names sortorder,prompt || return 1
   complexity_output="$(
     python -m radon cc activity_map garmin_export scripts -n D -s
   )"
@@ -56,7 +56,7 @@ static_analysis() {
     return 1
   fi
   printf 'No functions with complexity grade D or worse\n'
-  python -m pip check
+  python -m pip check || return 1
 }
 
 architecture_checks() {
@@ -71,7 +71,7 @@ docs_build() {
 
 build() {
   . .venv/bin/activate
-  python -m compileall activity_map garmin_export tests
+  python -m compileall activity_map garmin_export tests benchmarks
   python -m build
 }
 

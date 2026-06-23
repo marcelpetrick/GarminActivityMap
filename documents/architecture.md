@@ -52,6 +52,10 @@ flowchart LR
   models[activity_map.models]
   geo[activity_map.geo]
   render[activity_map.render]
+  loading[activity_map.loading]
+  lod[activity_map.lod]
+  spatial[activity_map.spatial]
+  qt_render[activity_map.qt_render]
   settings[activity_map.settings]
   tiles[activity_map.tiles]
   widgets[activity_map.widgets]
@@ -59,17 +63,32 @@ flowchart LR
 
   app --> widgets
   widgets --> settings
-  widgets --> loader
+  widgets --> loading
+  loading --> loader
+  loading --> render
   loader --> models
+  render --> models
   widgets --> geo
   widgets --> render
+  widgets --> lod
+  widgets --> spatial
+  widgets --> qt_render
   widgets --> tiles
   render --> geo
+  qt_render --> render
+  qt_render --> geo
+  spatial --> render
+  spatial --> geo
+  lod --> render
 ```
 
 - `activity_map.loader` recursively reads Garmin JSON files, validates coordinates and timestamps, computes segment speed, and flags malformed, coordinate-free, or implausible geometry without changing source payloads.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
 - `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
+- `activity_map.loading` coordinates background loading and immutable prepared snapshots without blocking the GUI thread.
+- `activity_map.lod` selects screen-space detail under an explicit visible-point budget.
+- `activity_map.spatial` indexes projected track bounds and returns only viewport-intersecting tracks.
+- `activity_map.qt_render` retains Qt paths and world transforms for batched drawing and cached backdrop geometry.
 - `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.
 - `activity_map.settings` loads and atomically persists versioned user preferences with validation and safe fallback defaults.
 - `activity_map.widgets` owns the PyQt window, controls, canvas drawing, and user interaction.

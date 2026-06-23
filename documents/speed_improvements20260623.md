@@ -543,6 +543,67 @@ The remaining full-quality raster frame is comfortably below the 16.7 ms
 replacement should be justified by new requirements such as perspective tilt,
 not by the original pan/zoom stutter.
 
+## Final Benchmark and Architecture Decision
+
+Final measurements on the reference machine:
+
+| Dataset and scenario | Before | Final |
+|---|---:|---:|
+| 1,000 distributed tracks, deep frame | about 497 ms | about 2.2 ms |
+| 1,000 distributed tracks, pan | about 497 ms | about 2.9 ms |
+| 1,000 distributed tracks, wheel zoom | about 498 ms | about 2.5 ms |
+| 1,000 overlapping tracks, deep frame | about 85.5 ms after culling alone | about 2.0 ms |
+| 2,000 distributed tracks, deep frame | not previously practical | about 3.1 ms |
+| 2,000 distributed tracks, pan | not previously practical | about 3.4 ms |
+
+The original 1,000-track deep-frame case improved by roughly 225×. The final
+2,000-track interaction remains well below a 16.7 ms 60-FPS frame budget.
+
+### Memory Trade-Off
+
+For 1,000 tracks × 300 points, process peak-RSS deltas were approximately:
+
+| Retained data | Additional memory |
+|---|---:|
+| Prepared projected and multi-LOD geometry | 36 MB |
+| Qt retained paths and indexes | 12 MB |
+| Total beyond the already-loaded source model | 49 MB |
+
+Memory should scale approximately with source and retained vertex count. Around
+100 MB of additional retained geometry for 2,000 similar tracks is acceptable
+for the target desktop workload. This is the intended compute-versus-memory
+trade: source points, projected LODs, and Qt paths stay resident so interaction
+does not reconstruct them.
+
+If memory becomes constrained, the first reduction should be to discard
+intermediate Python point tuples after their `QPainterPath` equivalents and
+point counts are built. Do not discard retained paths or reintroduce per-frame
+projection.
+
+### GPU and Tilt Decision
+
+A GPU rewrite is not justified for current 2D pan and zoom:
+
+- refined 2,000-track frames are about 3 ms;
+- cached gesture frames are below about 2 ms;
+- the current renderer remains simple, deterministic, and offscreen-testable;
+- a GPU backend would add context lifecycle, driver, text, tile, and CI
+  complexity without solving a remaining frame-budget problem.
+
+True perspective tilt is a different requirement. The current viewport and
+tile model are affine and two-dimensional. If tilt is approved, implement it
+as a separate renderer work package:
+
+1. define a camera with bearing, pitch, altitude, and projection matrices;
+2. retain/upload projected vertices in GPU buffers;
+3. reuse the existing spatial index and LOD planner before upload/draw;
+4. render tiles and tracks in a `QOpenGLWidget` or Qt Quick scene graph;
+5. keep labels and controls in the existing widget layer;
+6. add tilt-specific visual and frame-time benchmarks.
+
+The trigger for that project is the tilt feature itself or a future measured
+regression beyond the current frame budgets, not speculative optimization.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.
