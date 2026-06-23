@@ -8,6 +8,22 @@ from .models import ActivityTrack, TrackPoint
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectedBounds:
+    min_x: float
+    max_x: float
+    min_y: float
+    max_y: float
+
+    def intersects(self, other: ProjectedBounds) -> bool:
+        return not (
+            self.max_x < other.min_x
+            or self.min_x > other.max_x
+            or self.max_y < other.min_y
+            or self.min_y > other.max_y
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RenderTrack:
     activity_id: str
     name: str
@@ -15,6 +31,7 @@ class RenderTrack:
     simplified_segments: tuple[tuple[ProjectedPoint, ...], ...]
     marker: ProjectedPoint
     label_anchor: ProjectedPoint | None
+    bounds: ProjectedBounds
 
 
 MAX_CONTINUOUS_SEGMENT_METERS = 5_000.0
@@ -58,6 +75,9 @@ def prepare_track(
         )
     )
     label_anchor = segment_label_anchor(segments)
+    bounds = projected_bounds(segments)
+    if bounds is None:
+        bounds = ProjectedBounds(marker.x, marker.x, marker.y, marker.y)
     return RenderTrack(
         activity_id=track.activity_id,
         name=track.name,
@@ -65,6 +85,7 @@ def prepare_track(
         simplified_segments=simplified,
         marker=marker,
         label_anchor=label_anchor,
+        bounds=bounds,
     )
 
 
@@ -154,4 +175,18 @@ def segment_label_anchor(
     return ProjectedPoint(
         x=min(point.x for point in points),
         y=max(point.y for point in points),
+    )
+
+
+def projected_bounds(
+    segments: tuple[tuple[ProjectedPoint, ...], ...],
+) -> ProjectedBounds | None:
+    points = [point for segment in segments for point in segment]
+    if not points:
+        return None
+    return ProjectedBounds(
+        min_x=min(point.x for point in points),
+        max_x=max(point.x for point in points),
+        min_y=min(point.y for point in points),
+        max_y=max(point.y for point in points),
     )

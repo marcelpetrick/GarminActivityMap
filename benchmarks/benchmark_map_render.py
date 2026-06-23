@@ -27,6 +27,8 @@ class BenchmarkResult:
     p95_ms: float
     maximum_ms: float
     frames_per_second: float
+    visible_tracks: int
+    path_draw_calls: int
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -88,6 +90,7 @@ def measure_frames(
     scenario: str,
     frame_count: int,
     operation: Callable[[], object],
+    canvas: MapCanvas,
 ) -> BenchmarkResult:
     operation()
     samples = [timed(operation) for _ in range(frame_count)]
@@ -100,6 +103,8 @@ def measure_frames(
         p95_ms=sorted_samples[p95_index],
         maximum_ms=max(samples),
         frames_per_second=1_000.0 / median_ms,
+        visible_tracks=canvas.last_visible_track_count,
+        path_draw_calls=canvas.last_path_draw_calls,
     )
 
 
@@ -130,16 +135,19 @@ def run_benchmarks(
             "broad zoom (markers)",
             args.frames,
             lambda: render_at_zoom(canvas, center, 8_000.0),
+            canvas,
         ),
         measure_frames(
             "intermediate zoom (simplified)",
             args.frames,
             lambda: render_at_zoom(canvas, center, 120_000.0),
+            canvas,
         ),
         measure_frames(
             "deep zoom (full geometry)",
             args.frames,
             lambda: render_at_zoom(canvas, center, 1_000_000.0),
+            canvas,
         ),
     ]
 
@@ -154,7 +162,7 @@ def run_benchmarks(
         canvas.viewport = canvas.viewport.pan(8.0, 4.0)
         canvas.render_to_pixmap()
 
-    results.append(measure_frames("deep-zoom pan", args.frames, pan_frame))
+    results.append(measure_frames("deep-zoom pan", args.frames, pan_frame, canvas))
 
     zoom_anchor = ScreenPoint(canvas.width() / 2.0, canvas.height() / 2.0)
 
@@ -162,7 +170,9 @@ def run_benchmarks(
         canvas.viewport = canvas.viewport.zoom_at(1.01, zoom_anchor)
         canvas.render_to_pixmap()
 
-    results.append(measure_frames("deep-zoom wheel zoom", args.frames, zoom_frame))
+    results.append(
+        measure_frames("deep-zoom wheel zoom", args.frames, zoom_frame, canvas)
+    )
     canvas.shutdown_tiles()
     del application
     return preparation_ms, set_tracks_ms, results
@@ -187,13 +197,14 @@ def print_report(
     print(f"- `prepare_tracks`: {preparation_ms:.2f} ms")
     print(f"- `MapCanvas.set_tracks`: {set_tracks_ms:.2f} ms")
     print()
-    print("| Scenario | Median | p95 | Maximum | Median FPS |")
-    print("|---|---:|---:|---:|---:|")
+    print("| Scenario | Median | p95 | Maximum | Median FPS | Visible | Path calls |")
+    print("|---|---:|---:|---:|---:|---:|---:|")
     for result in results:
         print(
             f"| {result.scenario} | {result.median_ms:.2f} ms "
             f"| {result.p95_ms:.2f} ms | {result.maximum_ms:.2f} ms "
-            f"| {result.frames_per_second:.1f} |"
+            f"| {result.frames_per_second:.1f} | {result.visible_tracks:,} "
+            f"| {result.path_draw_calls:,} |"
         )
 
 

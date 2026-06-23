@@ -399,6 +399,30 @@ per-frame Python work. The remaining detailed-frame cost is still above the
 33.3 ms 30-FPS budget, so viewport culling and spatial selection remain
 necessary.
 
+### Phase 2 — Viewport Culling and Spatial Index
+
+Implemented in version `0.0.35`:
+
+- projected bounds cached for each prepared track;
+- a uniform-grid spatial index built once with the render snapshot;
+- viewport queries expanded by a small paint margin;
+- the same visible candidate set used for track paths and labels;
+- benchmark counters for visible tracks and submitted path calls.
+
+Synthetic benchmark result for 1,000 tracks × 300 points:
+
+| Scenario | Phase 1 | Phase 2 | Visible paths |
+|---|---:|---:|---:|
+| Detailed geometry | about 66 ms | about 17 ms | 156 / 1,000 |
+| Detailed pan | about 65 ms | about 18 ms | about 180 / 1,000 |
+| Detailed wheel zoom | about 67 ms | about 20 ms | about 140 / 1,000 |
+
+Deep-zoom interaction now runs at roughly 50–59 median FPS in the synthetic
+scenario. Broad and intermediate views legitimately intersect all tracks and
+continue to cost about 4–7 ms. The next optimization should address datasets
+where many dense tracks overlap in the same visible region by selecting
+screen-space LOD from an explicit vertex budget.
+
 ## Risks and Guardrails
 
 - `QPixmap` and widgets must stay on the GUI thread.

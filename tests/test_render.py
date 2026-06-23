@@ -38,6 +38,7 @@ def test_prepare_tracks_projects_track_points_once() -> None:
         ),
     )
     assert prepared[0].label_anchor is not None
+    assert prepared[0].bounds.min_x <= prepared[0].bounds.max_x
 
 
 def test_prepare_tracks_ignores_two_point_summary_only_tracks() -> None:

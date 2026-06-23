@@ -57,6 +57,7 @@ from .render import (
     track_label_anchor,
 )
 from .settings import SettingsStore
+from .spatial import TrackSpatialIndex, viewport_bounds
 from .tiles import (
     OSM_ATTRIBUTION,
     TileCache,
@@ -87,6 +88,9 @@ class MapCanvas(QWidget):
         self.tracks: tuple[ActivityTrack, ...] = ()
         self.render_tracks: tuple[RenderTrack, ...] = ()
         self.retained_track_paths: tuple[RetainedTrackPaths, ...] = ()
+        self.spatial_index = TrackSpatialIndex.build(())
+        self.last_visible_track_count = 0
+        self.last_path_draw_calls = 0
         self.viewport = fit_viewport(None, 960, 540)
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
@@ -105,6 +109,7 @@ class MapCanvas(QWidget):
         self.tracks = tracks
         self.render_tracks = prepare_tracks(tracks)
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
+        self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
         self.reset_view()
 
     def reset_view(self) -> None:
@@ -338,15 +343,21 @@ class MapCanvas(QWidget):
         pen = QPen(color, 2.2, Qt.PenStyle.SolidLine)
         pen.setCosmetic(True)
         painter.setPen(pen)
+        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
+        self.last_visible_track_count = len(visible_indexes)
+        self.last_path_draw_calls = 0
         if self.viewport.zoom > MARKER_MAX_ZOOM:
             painter.setWorldTransform(viewport_transform(self.viewport))
             use_detailed = self.viewport.zoom > SIMPLIFIED_MAX_ZOOM
-            for paths in self.retained_track_paths:
+            for index in visible_indexes:
+                paths = self.retained_track_paths[index]
                 painter.drawPath(paths.detailed if use_detailed else paths.simplified)
+                self.last_path_draw_calls += 1
         else:
             painter.setBrush(color)
             painter.setPen(Qt.PenStyle.NoPen)
-            for track in self.render_tracks:
+            for index in visible_indexes:
+                track = self.render_tracks[index]
                 geometry = geometry_for_zoom(track, self.viewport.zoom)
                 for marker in geometry.markers:
                     screen = self.viewport.world_to_screen(marker)
@@ -360,7 +371,9 @@ class MapCanvas(QWidget):
         label_font = QFont("Sans Serif", 8)
         painter.setFont(label_font)
         metrics = QFontMetrics(label_font)
-        for track in self.render_tracks:
+        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
+        for index in visible_indexes:
+            track = self.render_tracks[index]
             anchor = track_label_anchor(track)
             if anchor is None:
                 continue
