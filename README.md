@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.47`
+- Version: `0.0.48`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -203,8 +203,10 @@ Troubleshooting:
 The pipeline creates or reuses `.venv`, installs dependencies, checks formatting,
 linting, strict typing, dead code, complexity, installed dependencies, package
 architecture, documentation, package builds, unit tests, coverage, and CLI/GUI
-smoke runs. Coverage must remain at or above 95%. The pipeline prints a
-per-gate summary and exits non-zero if any gate fails.
+smoke runs. Coverage must remain at or above 95%. The pipeline finishes with an
+aligned per-gate summary that shows PASS or FAIL plus a one-line detail for each
+gate (file counts, test totals, coverage percentage, built artifacts) and exits
+non-zero if any gate fails.
 
 The GUI is also covered by offscreen end-to-end tests. These tests launch the
 real main window with fabricated Garmin-shaped activity files, drive the
