@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.46`
+- Version: `0.0.47`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -205,6 +205,24 @@ linting, strict typing, dead code, complexity, installed dependencies, package
 architecture, documentation, package builds, unit tests, coverage, and CLI/GUI
 smoke runs. Coverage must remain at or above 95%. The pipeline prints a
 per-gate summary and exits non-zero if any gate fails.
+
+The GUI is also covered by offscreen end-to-end tests. These tests launch the
+real main window with fabricated Garmin-shaped activity files, drive the
+directory selection workflow, verify incremental loading progress, exercise map
+pan/zoom interaction, and check recovery after malformed synthetic input. To run
+the focused GUI coverage check:
+
+```bash
+source .venv/bin/activate
+
+QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
+  python -m pytest tests/test_gui_e2e.py tests/test_widgets.py \
+  --cov=activity_map.widgets --cov-report=term-missing --cov-fail-under=0
+```
+
+Current result for that focused check: `10 passed`; `activity_map/widgets.py`
+reports 95% coverage. The total shown by that scoped command is lower because
+the project-wide coverage configuration still includes non-UI modules.
 
 Before a major automated operation, create a verified checkpoint and confirm
 the worktree is clean:
