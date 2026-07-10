@@ -128,6 +128,22 @@ class MapCanvas(QWidget):
         self._gesture_timer.setSingleShot(True)
         self._gesture_timer.timeout.connect(self.finish_gesture)
 
+    @property
+    def total_track_count(self) -> int:
+        return len(self.render_tracks)
+
+    @property
+    def visible_track_count(self) -> int:
+        return self.last_visible_track_count
+
+    @property
+    def selected_point_count(self) -> int:
+        return self.last_selected_point_count
+
+    @property
+    def path_draw_call_count(self) -> int:
+        return self.last_path_draw_calls
+
     def set_tracks(self, tracks: tuple[ActivityTrack, ...]) -> None:
         self.set_prepared_tracks(tracks, prepare_tracks(tracks))
 
@@ -556,10 +572,10 @@ class MainWindow(QMainWindow):
         self.warning_label = QLabel("")
         self.warning_label.setWordWrap(True)
 
-        choose_button = QPushButton("Open Directory")
-        choose_button.clicked.connect(self.choose_directory)
-        reset_button = QPushButton("Reset View")
-        reset_button.clicked.connect(self.canvas.reset_view)
+        self.choose_button = QPushButton("Open Directory")
+        self.choose_button.clicked.connect(self.choose_directory)
+        self.reset_button = QPushButton("Reset View")
+        self.reset_button.clicked.connect(self.canvas.reset_view)
 
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setObjectName("trackOpacitySlider")
@@ -596,8 +612,8 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(title_label("Activity Map"))
         side_layout.addWidget(subtitle_label("Local Garmin track explorer"))
         side_layout.addSpacing(10)
-        side_layout.addWidget(choose_button)
-        side_layout.addWidget(reset_button)
+        side_layout.addWidget(self.choose_button)
+        side_layout.addWidget(self.reset_button)
         side_layout.addSpacing(12)
         side_layout.addWidget(field_label("Legend"))
         legend, self.track_legend_swatch = legend_row(
@@ -628,6 +644,18 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         self.setStyleSheet(APP_STYLES)
         self.save_settings()
+
+    @property
+    def total_track_count(self) -> int:
+        return self.canvas.total_track_count
+
+    @property
+    def visible_track_count(self) -> int:
+        return self.canvas.visible_track_count
+
+    @property
+    def load_status_text(self) -> str:
+        return self.status_label.text()
 
     def choose_directory(self) -> None:
         directory = QFileDialog.getExistingDirectory(
