@@ -30,7 +30,7 @@ def test_polyline_path_retains_segment_breaks() -> None:
     assert path.elementAt(3).isLineTo()
 
 
-def test_prepare_retained_paths_builds_both_zoom_tiers() -> None:
+def test_prepare_retained_paths_builds_zoom_tiers_lazily() -> None:
     track = ActivityTrack(
         activity_id="retained",
         name="Retained",
@@ -45,8 +45,16 @@ def test_prepare_retained_paths_builds_both_zoom_tiers() -> None:
     retained = prepare_retained_paths(prepared)
 
     assert len(retained) == 1
-    assert retained[0].simplified.elementCount() < retained[0].detailed.elementCount()
-    assert len(retained[0].levels) == len(prepared[0].levels)
+    assert retained[0].level_count == len(prepared[0].levels)
+    assert retained[0].cached_level_count == 0
+
+    simplified = retained[0].simplified
+    assert retained[0].simplified is simplified
+    assert retained[0].cached_level_count == 1
+
+    detailed = retained[0].detailed
+    assert simplified.elementCount() < detailed.elementCount()
+    assert retained[0].cached_level_count == 2
 
 
 def test_viewport_transform_matches_world_to_screen() -> None:

@@ -59,7 +59,8 @@ Loading and pure render preparation run asynchronously through a single
 background load executor. The GUI thread immediately displays loading state,
 continues processing input and paint events, and accepts the immutable
 `PreparedLoad` result through a queued Qt signal. Retained `QPainterPath`
-creation and snapshot installation remain on the GUI thread.
+creation remains on the GUI thread but is deferred until a prepared level is
+first painted.
 
 ## Current Runtime Sequence
 
@@ -97,7 +98,7 @@ sequenceDiagram
   end
   Worker-->>Window: queued PreparedLoad signal
   Window->>Canvas: set_prepared_tracks(tracks, render_tracks)
-  Canvas->>Canvas: build retained Qt paths and fit viewport
+  Canvas->>Canvas: install lazy path holders and fit viewport
   Canvas-->>Window: first repaint requested
 
   User->>Canvas: drag or wheel event
@@ -111,6 +112,7 @@ sequenceDiagram
     Canvas->>Tiles: request missing tiles asynchronously
     Canvas->>Canvas: query spatial index
     Canvas->>Canvas: select screen-space LOD and point budget
+    Canvas->>Canvas: materialize uncached visible paths for selected LOD
     Canvas->>Qt: draw backdrop and cached tiles
     loop Every visible retained track
       Canvas->>Qt: draw retained QPainterPath

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 from PyQt6.QtGui import QPainterPath, QTransform
@@ -10,17 +10,36 @@ from .models import TrackPoint
 from .render import RenderTrack
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class RetainedTrackPaths:
-    levels: tuple[QPainterPath, ...]
+    track: RenderTrack
+    _levels: list[QPainterPath | None] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._levels = [None] * len(self.track.levels)
+
+    def path_for(self, level_index: int) -> QPainterPath:
+        path = self._levels[level_index]
+        if path is None:
+            path = polyline_path(self.track.levels[level_index].segments)
+            self._levels[level_index] = path
+        return path
+
+    @property
+    def level_count(self) -> int:
+        return len(self._levels)
+
+    @property
+    def cached_level_count(self) -> int:
+        return sum(path is not None for path in self._levels)
 
     @property
     def simplified(self) -> QPainterPath:
-        return self.levels[1]
+        return self.path_for(1)
 
     @property
     def detailed(self) -> QPainterPath:
-        return self.levels[-1]
+        return self.path_for(-1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,12 +51,7 @@ class BackdropPaths:
 def prepare_retained_paths(
     tracks: tuple[RenderTrack, ...],
 ) -> tuple[RetainedTrackPaths, ...]:
-    return tuple(
-        RetainedTrackPaths(
-            levels=tuple(polyline_path(level.segments) for level in track.levels),
-        )
-        for track in tracks
-    )
+    return tuple(RetainedTrackPaths(track) for track in tracks)
 
 
 def polyline_path(

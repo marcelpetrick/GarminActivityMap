@@ -458,7 +458,7 @@ class MapCanvas(QWidget):
             self.last_lod_tolerance = selection.tolerance_world
             for index in visible_indexes:
                 paths = self.retained_track_paths[index]
-                painter.drawPath(paths.levels[selection.level_index])
+                painter.drawPath(paths.path_for(selection.level_index))
                 self.last_path_draw_calls += 1
         else:
             self.last_selected_point_count = len(visible_indexes)

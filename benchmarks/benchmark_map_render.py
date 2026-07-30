@@ -23,6 +23,7 @@ from activity_map.widgets import MapCanvas
 @dataclass(frozen=True, slots=True)
 class BenchmarkResult:
     scenario: str
+    first_ms: float
     median_ms: float
     p95_ms: float
     maximum_ms: float
@@ -107,13 +108,14 @@ def measure_frames(
     operation: Callable[[], object],
     canvas: MapCanvas,
 ) -> BenchmarkResult:
-    operation()
+    first_ms = timed(operation)
     samples = [timed(operation) for _ in range(frame_count)]
     median_ms = statistics.median(samples)
     sorted_samples = sorted(samples)
     p95_index = min(len(sorted_samples) - 1, int(len(sorted_samples) * 0.95))
     return BenchmarkResult(
         scenario=scenario,
+        first_ms=first_ms,
         median_ms=median_ms,
         p95_ms=sorted_samples[p95_index],
         maximum_ms=max(samples),
@@ -245,13 +247,14 @@ def print_report(
     print(f"- `MapCanvas.set_tracks`: {set_tracks_ms:.2f} ms")
     print()
     print(
-        "| Scenario | Median | p95 | Maximum | Median FPS | Visible "
+        "| Scenario | First | Median | p95 | Maximum | Median FPS | Visible "
         "| Path calls | Points | LOD tolerance |"
     )
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for result in results:
         print(
-            f"| {result.scenario} | {result.median_ms:.2f} ms "
+            f"| {result.scenario} | {result.first_ms:.2f} ms "
+            f"| {result.median_ms:.2f} ms "
             f"| {result.p95_ms:.2f} ms | {result.maximum_ms:.2f} ms "
             f"| {result.frames_per_second:.1f} | {result.visible_tracks:,} "
             f"| {result.path_draw_calls:,} | {result.selected_points:,} "
