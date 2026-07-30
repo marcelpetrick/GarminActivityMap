@@ -69,6 +69,7 @@ sequenceDiagram
   participant Window as MainWindow / GUI thread
   participant Worker as Background load executor
   participant Loader as activity_map.loader
+  participant Cache as prepared snapshot cache
   participant Render as activity_map.render
   participant Canvas as MapCanvas / GUI thread
   participant Tiles as tile worker pool
@@ -76,17 +77,23 @@ sequenceDiagram
 
   User->>Window: Open directory
   Window->>Worker: submit load_and_prepare_directory(path)
-  Worker->>Loader: load_directory(path)
-  loop Every JSON file, sequentially
-    Loader->>Loader: read, decode, recursively inspect
-    Loader->>Loader: validate every adjacent GPS segment
-  end
-  Loader-->>Worker: immutable ActivityTrack tuple
-  Worker->>Render: prepare_tracks(tracks)
-  loop Every retained track, sequentially
-    Render->>Render: project points and split segments
-    Render->>Render: recursively simplify each segment
-    Render->>Render: calculate marker
+  Worker->>Cache: look up source fingerprint
+  alt Valid prepared snapshot exists
+    Cache-->>Worker: parsed tracks and prepared geometry
+  else Cache miss or source files changed
+    Worker->>Loader: load_directory(path)
+    loop Every JSON file, sequentially
+      Loader->>Loader: read, decode, inspect structured containers
+      Loader->>Loader: validate every adjacent GPS segment
+    end
+    Loader-->>Worker: immutable ActivityTrack tuple
+    Worker->>Render: prepare_tracks(tracks)
+    loop Every retained track, sequentially
+      Render->>Render: project points and split segments
+      Render->>Render: iteratively prepare nested LOD geometry
+      Render->>Render: calculate marker and bounds
+    end
+    Worker->>Cache: atomically store versioned snapshot
   end
   Worker-->>Window: queued PreparedLoad signal
   Window->>Canvas: set_prepared_tracks(tracks, render_tracks)
@@ -114,6 +121,9 @@ sequenceDiagram
 ```
 
 Track loading and pure render preparation now execute away from the GUI thread.
+Repeat loads first validate a lightweight relative-path/size/mtime fingerprint
+and reuse a versioned prepared snapshot when it matches. Corrupt, missing, or
+stale cache entries fall back to the ordinary loader without failing the GUI.
 The loader and process-preparation APIs support multiple workers, but measured
 defaults remain one worker because four threads did not improve local SSD JSON
 loading and four processes were slower after serialization. Tile network and

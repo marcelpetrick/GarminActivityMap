@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.51`
+- Version: `0.0.52`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -181,6 +181,13 @@ distance and speed, total distance, duration, and geographic bounds. Rendering
 uses cached markers at broad zoom, simplified polylines at intermediate zoom,
 and full validated geometry when zoomed in.
 
+Parsed tracks and prepared geometry are cached under the platform cache
+directory for faster repeat startup. Cache entries are keyed by the resolved
+dataset path plus every activity file's relative path, size, and modification
+time, and are written atomically with user-only permissions. Set
+`ACTIVITY_MAP_PREPARED_CACHE_DIR` to relocate this cache or
+`ACTIVITY_MAP_DISABLE_PREPARED_CACHE=1` to disable it.
+
 For a headless smoke check:
 
 ```bash
@@ -270,7 +277,8 @@ QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
 ```
 
 Use `--loader-workers` and `--prepare-workers` to compare concurrency settings,
-or `--max-load-to-display-ms` to turn the measurement into a regression gate.
+`--use-prepared-cache` to report repeat-snapshot loading, or
+`--max-load-to-display-ms` to turn the cold measurement into a regression gate.
 
 ## Privacy
 

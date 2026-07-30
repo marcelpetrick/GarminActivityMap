@@ -16,6 +16,7 @@ os.environ.setdefault("ACTIVITY_MAP_DISABLE_TILES", "1")
 from PyQt6.QtWidgets import QApplication
 
 from activity_map.loader import load_directory_parallel
+from activity_map.loading import load_and_prepare_directory
 from activity_map.render import prepare_tracks_parallel
 from activity_map.widgets import MapCanvas
 
@@ -29,6 +30,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--samples", type=positive_int, default=3)
     parser.add_argument("--loader-workers", type=positive_int, default=1)
     parser.add_argument("--prepare-workers", type=positive_int, default=1)
+    parser.add_argument(
+        "--use-prepared-cache",
+        action="store_true",
+        help="Include the versioned prepared-geometry cache in repeated samples.",
+    )
     parser.add_argument("--width", type=positive_int, default=1_200)
     parser.add_argument("--height", type=positive_int, default=760)
     parser.add_argument(
@@ -80,11 +86,17 @@ def measure(operation: Callable[[], object], samples: int) -> float:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.use_prepared_cache:
+        os.environ.pop("ACTIVITY_MAP_DISABLE_PREPARED_CACHE", None)
+    else:
+        os.environ["ACTIVITY_MAP_DISABLE_PREPARED_CACHE"] = "1"
     application = QApplication.instance() or QApplication([])
     canvas = MapCanvas()
     canvas.resize(args.width, args.height)
     with tempfile.TemporaryDirectory(prefix="activity-map-benchmark-") as directory:
         root = Path(directory)
+        if args.use_prepared_cache:
+            os.environ["ACTIVITY_MAP_PREPARED_CACHE_DIR"] = str(root / "prepared-cache")
         dataset_write = measure(
             lambda: write_dataset(root, args.tracks, args.points_per_track),
             1,
@@ -116,6 +128,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.samples,
         )
         first_display_ms = measure(canvas.render_to_pixmap, args.samples)
+        cached_snapshot_ms = None
+        if args.use_prepared_cache:
+            load_and_prepare_directory(root)
+            cached_snapshot_ms = measure(
+                lambda: load_and_prepare_directory(root),
+                args.samples,
+            )
 
     load_to_display_ms = load_ms + prepare_ms + set_tracks_ms + first_display_ms
     print("# Activity load-to-display benchmark")
@@ -128,6 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"- Samples: {args.samples}")
     print(f"- Loader workers: {args.loader_workers}")
     print(f"- Preparation workers: {args.prepare_workers}")
+    print(f"- Prepared cache: {'enabled' if args.use_prepared_cache else 'disabled'}")
     print(f"- Canvas: {args.width} × {args.height}")
     print()
     print("| Operation | Median |")
@@ -137,6 +157,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"| Render preparation | {prepare_ms:.2f} ms |")
     print(f"| Canvas indexing and retained paths | {set_tracks_ms:.2f} ms |")
     print(f"| First offscreen display | {first_display_ms:.2f} ms |")
+    if cached_snapshot_ms is not None:
+        print(f"| Repeat cached prepared snapshot | {cached_snapshot_ms:.2f} ms |")
     print(f"| **Load to first display** | **{load_to_display_ms:.2f} ms** |")
 
     canvas.shutdown_tiles()
