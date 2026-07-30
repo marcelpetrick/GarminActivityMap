@@ -222,27 +222,11 @@ def load_activity_file(
 def extract_track_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
     points: list[TrackPoint] = []
 
-    points.extend(extract_polyline_points(payload))
-    points.extend(extract_metric_points(payload))
-
-    if not points:
-        points.extend(extract_coordinate_dicts(payload))
-
-    return deduplicate_adjacent(points)
-
-
-def extract_polyline_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
-    points: list[TrackPoint] = []
-    for container in walk_mappings(payload):
+    for container in walk_track_containers(payload):
         polyline = container.get("polyline")
         if isinstance(polyline, Sequence) and not isinstance(polyline, str | bytes):
             points.extend(point for point in parse_point_sequence(polyline) if point)
-    return points
 
-
-def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
-    points: list[TrackPoint] = []
-    for container in walk_mappings(payload):
         descriptors = container.get("metricDescriptors")
         rows = container.get("activityDetailMetrics")
         if not isinstance(descriptors, Sequence) or not isinstance(rows, Sequence):
@@ -270,7 +254,11 @@ def extract_metric_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
                     altitude_index,
                 )
             )
-    return points
+
+    if not points:
+        points.extend(extract_coordinate_dicts(payload))
+
+    return deduplicate_adjacent(points)
 
 
 def extract_coordinate_dicts(payload: Mapping[str, Any]) -> list[TrackPoint]:
@@ -521,6 +509,18 @@ def walk_mappings(value: Any) -> Iterator[Mapping[str, Any]]:
     elif isinstance(value, Sequence) and not isinstance(value, str | bytes):
         for child in value:
             yield from walk_mappings(child)
+
+
+def walk_track_containers(value: Any) -> Iterator[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        yield value
+        for key, child in value.items():
+            if key in {"polyline", "metricDescriptors", "activityDetailMetrics"}:
+                continue
+            yield from walk_track_containers(child)
+    elif isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        for child in value:
+            yield from walk_track_containers(child)
 
 
 def deduplicate_adjacent(points: Iterable[TrackPoint]) -> list[TrackPoint]:
