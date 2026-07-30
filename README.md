@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.49`
+- Version: `0.0.50`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -203,7 +203,9 @@ Troubleshooting:
 The pipeline creates or reuses `.venv`, installs dependencies, checks formatting,
 linting, strict typing, dead code, complexity, installed dependencies, package
 architecture, documentation, package builds, unit tests, coverage, and CLI/GUI
-smoke runs. Coverage must remain at or above 95%. The pipeline finishes with an
+smoke runs. It also loads, prepares, indexes, and renders 1,000 synthetic tracks
+with 300 points each, failing if the load-to-first-display time exceeds eight
+seconds. Coverage must remain at or above 95%. The pipeline finishes with an
 aligned per-gate summary that shows PASS or FAIL plus a one-line detail for each
 gate (file counts, test totals, coverage percentage, built artifacts) and exits
 non-zero if any gate fails.
@@ -257,11 +259,18 @@ QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
   python benchmarks/benchmark_map_render.py --tracks 1000
 ```
 
-Benchmark sequential versus parallel file loading and render preparation with:
+Measure synthetic file loading through the first offscreen display with:
 
 ```bash
-python benchmarks/benchmark_loading.py --tracks 1000 --points-per-track 300
+QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
+  python benchmarks/benchmark_loading.py \
+    --tracks 1000 \
+    --points-per-track 300 \
+    --samples 3
 ```
+
+Use `--loader-workers` and `--prepare-workers` to compare concurrency settings,
+or `--max-load-to-display-ms` to turn the measurement into a regression gate.
 
 ## Privacy
 

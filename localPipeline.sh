@@ -168,6 +168,28 @@ coverage_check() {
   return "$status"
 }
 
+performance_check() {
+  activate_venv || return 1
+  export QT_QPA_PLATFORM=offscreen
+  export ACTIVITY_MAP_DISABLE_TILES=1
+  local log="$tmp_dir/performance.log"
+  if ! python benchmarks/benchmark_loading.py \
+    --tracks 1000 \
+    --points-per-track 300 \
+    --samples 1 \
+    --max-load-to-display-ms 8000 2>&1 | tee "$log"; then
+    STEP_DETAIL="$(last_line "$log")"
+    return 1
+  fi
+  local total
+  total="$(
+    grep 'Load to first display' "$log" |
+      sed -E 's/.*\*\*([0-9.]+ ms)\*\*.*/\1/' |
+      tail -n 1
+  )"
+  STEP_DETAIL="${total:-completed} for 1,000 tracks (limit 8,000 ms)"
+}
+
 run_smoke() {
   activate_venv || return 1
   export QT_QPA_PLATFORM=offscreen
@@ -188,6 +210,7 @@ run_step "Docs" docs_build
 run_step "Package Build" build
 run_step "Tests" test_suite
 run_step "Coverage" coverage_check
+run_step "Performance" performance_check
 run_step "Smoke Test" run_smoke
 
 printf '\n========== Local Pipeline Summary ==========\n'
