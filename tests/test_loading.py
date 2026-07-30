@@ -120,3 +120,14 @@ def test_prepared_cache_ignores_corrupt_and_disabled_entries(
 
     monkeypatch.setenv("ACTIVITY_MAP_DISABLE_PREPARED_CACHE", "1")
     assert cache.load(tmp_path, fingerprint) is None
+
+
+def test_missing_directory_report_is_not_cached(tmp_path: Path) -> None:
+    dataset = tmp_path / "later"
+
+    missing = load_and_prepare_directory(dataset)
+    dataset.mkdir()
+    available = load_and_prepare_directory(dataset)
+
+    assert missing.report.warnings
+    assert available.report.warnings == ()

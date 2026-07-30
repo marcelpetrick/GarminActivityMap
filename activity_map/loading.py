@@ -72,6 +72,8 @@ def safe_fingerprint(
     cache: PreparedGeometryCache,
     path: Path,
 ) -> DatasetFingerprint | None:
+    if not path.is_dir():
+        return None
     try:
         return cache.fingerprint(path)
     except OSError:
