@@ -105,10 +105,12 @@ def prepare_track(
     max_segment_distance_meters: float,
 ) -> RenderTrack:
     segments = split_projected_segments(track, max_segment_distance_meters)
-    simplified = tuple(
-        simplify_polyline(segment, SIMPLIFICATION_TOLERANCE) for segment in segments
+    levels = prepare_levels(segments)
+    simplified = next(
+        level.segments
+        for level in levels
+        if level.tolerance_world == SIMPLIFICATION_TOLERANCE
     )
-    levels = prepare_levels(segments, simplified)
     latitude_sum = 0.0
     longitude_sum = 0.0
     for point in track.points:
@@ -120,10 +122,12 @@ def prepare_track(
             longitude=longitude_sum / len(track.points),
         )
     )
-    label_anchor = segment_label_anchor(segments)
     bounds = projected_bounds(segments)
     if bounds is None:
         bounds = ProjectedBounds(marker.x, marker.x, marker.y, marker.y)
+        label_anchor = None
+    else:
+        label_anchor = ProjectedPoint(bounds.min_x, bounds.max_y)
     return RenderTrack(
         activity_id=track.activity_id,
         name=track.name,
@@ -150,20 +154,25 @@ def simplify_polyline(
 ) -> tuple[ProjectedPoint, ...]:
     if len(points) <= 2:
         return points
-    start = points[0]
-    end = points[-1]
-    furthest_index = 0
-    furthest_distance = 0.0
-    for index, point in enumerate(points[1:-1], start=1):
-        distance = perpendicular_distance(point, start, end)
-        if distance > furthest_distance:
-            furthest_index = index
-            furthest_distance = distance
-    if furthest_distance <= tolerance:
-        return (start, end)
-    left = simplify_polyline(points[: furthest_index + 1], tolerance)
-    right = simplify_polyline(points[furthest_index:], tolerance)
-    return left[:-1] + right
+    retained_indexes = {0, len(points) - 1}
+    pending = [(0, len(points) - 1)]
+    while pending:
+        start_index, end_index = pending.pop()
+        start = points[start_index]
+        end = points[end_index]
+        furthest_index = start_index
+        furthest_distance = 0.0
+        for index in range(start_index + 1, end_index):
+            distance = perpendicular_distance(points[index], start, end)
+            if distance > furthest_distance:
+                furthest_index = index
+                furthest_distance = distance
+        if furthest_distance <= tolerance:
+            continue
+        retained_indexes.add(furthest_index)
+        pending.append((start_index, furthest_index))
+        pending.append((furthest_index, end_index))
+    return tuple(points[index] for index in sorted(retained_indexes))
 
 
 def perpendicular_distance(
@@ -225,42 +234,43 @@ def track_label_anchor(track: RenderTrack) -> ProjectedPoint | None:
     return track.label_anchor
 
 
-def segment_label_anchor(
-    segments: tuple[tuple[ProjectedPoint, ...], ...],
-) -> ProjectedPoint | None:
-    points = [point for segment in segments for point in segment]
-    if not points:
-        return None
-    return ProjectedPoint(
-        x=min(point.x for point in points),
-        y=max(point.y for point in points),
-    )
-
-
 def projected_bounds(
     segments: tuple[tuple[ProjectedPoint, ...], ...],
 ) -> ProjectedBounds | None:
-    points = [point for segment in segments for point in segment]
-    if not points:
+    points = (point for segment in segments for point in segment)
+    first = next(points, None)
+    if first is None:
         return None
+    min_x = max_x = first.x
+    min_y = max_y = first.y
+    for point in points:
+        min_x = min(min_x, point.x)
+        max_x = max(max_x, point.x)
+        min_y = min(min_y, point.y)
+        max_y = max(max_y, point.y)
     return ProjectedBounds(
-        min_x=min(point.x for point in points),
-        max_x=max(point.x for point in points),
-        min_y=min(point.y for point in points),
-        max_y=max(point.y for point in points),
+        min_x=min_x,
+        max_x=max_x,
+        min_y=min_y,
+        max_y=max_y,
     )
 
 
 def prepare_levels(
     segments: tuple[tuple[ProjectedPoint, ...], ...],
-    simplified_segments: tuple[tuple[ProjectedPoint, ...], ...],
 ) -> tuple[RenderLevel, ...]:
+    finest_tolerance = min(LOD_TOLERANCES)
+    finest_segments = tuple(
+        simplify_polyline(segment, finest_tolerance) for segment in segments
+    )
     levels: list[RenderLevel] = []
     for tolerance in LOD_TOLERANCES:
         level_segments = (
-            simplified_segments
-            if tolerance == SIMPLIFICATION_TOLERANCE
-            else tuple(simplify_polyline(segment, tolerance) for segment in segments)
+            finest_segments
+            if tolerance == finest_tolerance
+            else tuple(
+                simplify_polyline(segment, tolerance) for segment in finest_segments
+            )
         )
         levels.append(
             RenderLevel(

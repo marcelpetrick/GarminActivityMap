@@ -163,6 +163,24 @@ def test_simplify_polyline_preserves_endpoints_and_significant_turns() -> None:
     assert points[2] in simplified
 
 
+def test_simplify_polyline_handles_long_paths_without_recursion() -> None:
+    points = tuple(
+        project_point(
+            TrackPoint(
+                latitude=(index % 2) * 0.001,
+                longitude=index * 0.0001,
+            )
+        )
+        for index in range(2_000)
+    )
+
+    simplified = simplify_polyline(points, tolerance=0.0000001)
+
+    assert simplified[0] == points[0]
+    assert simplified[-1] == points[-1]
+    assert len(simplified) > 2
+
+
 def test_split_reuses_validated_segment_distances(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
