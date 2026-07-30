@@ -113,6 +113,23 @@ def test_extract_track_points_converts_semicircle_coordinates() -> None:
     assert round(points[0].longitude, 2) == 13.4
 
 
+def test_simple_polyline_fast_path_preserves_coordinate_validation() -> None:
+    points = extract_track_points(
+        {
+            "polyline": [
+                {"lat": 52.0, "lon": 13.0},
+                {"lat": "invalid", "lon": 13.1},
+                {"lat": 52.2, "lon": 13.2},
+            ]
+        }
+    )
+
+    assert points == [
+        TrackPoint(52.0, 13.0),
+        TrackPoint(52.2, 13.2),
+    ]
+
+
 def test_load_directory_skips_manifest_and_reports_bad_files(tmp_path: Path) -> None:
     write_json(tmp_path / "manifest.json", {"files": ["ignored"]})
     write_json(

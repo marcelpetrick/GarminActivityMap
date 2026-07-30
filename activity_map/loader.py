@@ -272,7 +272,15 @@ def extract_coordinate_dicts(payload: Mapping[str, Any]) -> list[TrackPoint]:
 
 def parse_point_sequence(values: Sequence[Any]) -> Iterator[TrackPoint | None]:
     for item in values:
-        if isinstance(item, Mapping):
+        if (
+            isinstance(item, dict)
+            and "lat" in item
+            and "lon" in item
+            and item.keys().isdisjoint(TIMESTAMP_KEYS)
+            and item.keys().isdisjoint(ALTITUDE_KEYS)
+        ):
+            yield make_point(item["lat"], item["lon"])
+        elif isinstance(item, Mapping):
             yield parse_coordinate_mapping(item)
         elif (
             isinstance(item, Sequence)
