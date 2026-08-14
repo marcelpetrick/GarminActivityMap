@@ -3,6 +3,7 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -325,7 +326,10 @@ def test_export_skips_existing_activity_files_by_default(tmp_path: Path) -> None
     client = FakeClient()
     activity_file = tmp_path / "activities" / "101.json"
     activity_file.parent.mkdir(parents=True)
-    activity_file.write_text('{"existing": true}\n', encoding="utf-8")
+    activity_file.write_text(
+        '{"activity": {"existing": true}, "details": {}, "summary": {}}\n',
+        encoding="utf-8",
+    )
     config = ExportConfig(
         output_dir=tmp_path,
         page_size=2,
@@ -344,7 +348,11 @@ def test_export_skips_existing_activity_files_by_default(tmp_path: Path) -> None
     assert result.activity_count == 3
     assert result.skipped_existing_count == 1
     assert ("summary", "101") not in client.detail_calls
-    assert json.loads(activity_file.read_text(encoding="utf-8")) == {"existing": True}
+    assert json.loads(activity_file.read_text(encoding="utf-8")) == {
+        "activity": {"existing": True},
+        "details": {},
+        "summary": {},
+    }
 
 
 def test_throttle_before_detail_uses_delay_and_jitter(
@@ -571,6 +579,17 @@ class DatedClient(FakeClient):
         ]
 
 
+def write_complete_activity(path: Path) -> None:
+    write_json(
+        path,
+        {"activity": {"full": True}, "details": {"metrics": []}, "summary": {}},
+    )
+
+
+def write_summary_only_activity(path: Path) -> None:
+    write_json(path, {"summary": {"activityId": int(path.stem)}})
+
+
 def dated_config(output_dir: Path) -> ExportConfig:
     return ExportConfig(
         output_dir=output_dir,
@@ -592,7 +611,7 @@ def test_export_plan_reports_detected_range_and_missing_activities(
     config = dated_config(tmp_path)
     activity_dir = tmp_path / "activities"
     activity_dir.mkdir(parents=True)
-    (activity_dir / "301.json").write_text("{}", encoding="utf-8")
+    write_complete_activity(activity_dir / "301.json")
     client = DatedClient()
 
     plan = build_export_plan(collect_activities(client, config), config)
@@ -600,6 +619,7 @@ def test_export_plan_reports_detected_range_and_missing_activities(
     assert plan.total == 3
     assert plan.already_present == 1
     assert plan.missing == 2
+    assert plan.summary_only == 0
     assert plan.first_activity_date == "2025-01-04"
     assert plan.last_activity_date == "2025-01-27"
     assert plan.undated_count == 0
@@ -611,7 +631,8 @@ def test_export_only_downloads_activities_missing_on_disk(
 ) -> None:
     activity_dir = tmp_path / "activities"
     activity_dir.mkdir(parents=True)
-    (activity_dir / "301.json").write_text("{}", encoding="utf-8")
+    write_complete_activity(activity_dir / "301.json")
+    preserved = (activity_dir / "301.json").read_text(encoding="utf-8")
     client = DatedClient()
 
     result = export_activities(client, dated_config(tmp_path))
@@ -623,7 +644,7 @@ def test_export_only_downloads_activities_missing_on_disk(
     assert result.last_activity_date == "2025-01-27"
     assert [call for call in client.detail_calls if call[1] == "301"] == []
     assert ("details", "302") in client.detail_calls
-    assert (activity_dir / "301.json").read_text(encoding="utf-8") == "{}"
+    assert (activity_dir / "301.json").read_text(encoding="utf-8") == preserved
 
     output = capsys.readouterr().out
     assert "Activities listed : 3 from 2025-01-04 to 2025-01-27" in output
@@ -639,7 +660,7 @@ def test_export_plan_reports_a_complete_local_export(
     activity_dir = tmp_path / "activities"
     activity_dir.mkdir(parents=True)
     for activity_id in (301, 302, 303):
-        (activity_dir / f"{activity_id}.json").write_text("{}", encoding="utf-8")
+        write_complete_activity(activity_dir / f"{activity_id}.json")
     client = DatedClient()
 
     result = export_activities(client, dated_config(tmp_path))
@@ -647,6 +668,41 @@ def test_export_plan_reports_a_complete_local_export(
     assert result.downloaded_count == 0
     assert client.detail_calls == []
     assert "Nothing to download" in capsys.readouterr().out
+
+
+def test_summary_only_files_are_completed_with_details(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    activity_dir = tmp_path / "activities"
+    activity_dir.mkdir(parents=True)
+    write_summary_only_activity(activity_dir / "301.json")
+    write_complete_activity(activity_dir / "302.json")
+    client = DatedClient()
+
+    result = export_activities(client, dated_config(tmp_path))
+    payload = json.loads((activity_dir / "301.json").read_text(encoding="utf-8"))
+
+    assert ("details", "301") in client.detail_calls
+    assert ("details", "302") not in client.detail_calls
+    assert "details" in payload
+    assert result.downloaded_count == 2
+    assert result.skipped_existing_count == 1
+    assert "Summary only      : 1 (details will be fetched)" in capsys.readouterr().out
+
+
+def test_summary_only_files_are_kept_when_details_are_disabled(tmp_path: Path) -> None:
+    activity_dir = tmp_path / "activities"
+    activity_dir.mkdir(parents=True)
+    write_summary_only_activity(activity_dir / "301.json")
+    config = replace(dated_config(tmp_path), include_details=False)
+    client = DatedClient()
+
+    result = export_activities(client, config)
+
+    assert result.skipped_existing_count == 1
+    assert result.downloaded_count == 2
+    assert client.detail_calls == []
 
 
 def test_activity_start_date_reads_known_shapes() -> None:

@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.61`
+- Version: `0.0.62`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -108,6 +108,13 @@ newly recorded activities and activities that failed earlier - instead of
 downloading the archive again. `--no-skip-existing` opts out and re-downloads
 everything. Add `--verbose` for a timestamped line per Garmin request, retry,
 and file write.
+
+A detailed run also completes activities that were previously exported with
+`--no-details`: a stored file that contains only the `summary` payload is
+reported as `Summary only` in the plan and its `activity` and `details` payloads
+are fetched, so switching from a summary-only export to a full export fills the
+missing detail data instead of leaving those activities incomplete forever. A
+summary-only run leaves such files untouched.
 
 For a cautious 2026 export:
 

@@ -22,6 +22,7 @@ DEFAULT_MAX_RETRIES = 5
 DEFAULT_BACKOFF_INITIAL_SECONDS = 2.0
 DEFAULT_BACKOFF_MAX_SECONDS = 60.0
 PROGRESS_REPORT_INTERVAL = 10
+DETAIL_PROBE_BYTES = 512
 T = TypeVar("T")
 
 
@@ -87,6 +88,7 @@ class ExportPlan:
     total: int
     already_present: int
     missing: int
+    summary_only: int
     first_activity_date: str | None
     last_activity_date: str | None
     undated_count: int
@@ -344,7 +346,9 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
         output_file = config.output_dir / relative_file
         progress_label = f"{index}/{activity_total}"
 
-        if config.skip_existing and output_file.exists():
+        if config.skip_existing and is_complete_export(
+            output_file, config.include_details
+        ):
             verbose_log(
                 config.verbose,
                 f"{progress_label} skip existing activity {activity_id}",
@@ -436,6 +440,7 @@ def build_export_plan(
     config: ExportConfig,
 ) -> ExportPlan:
     already_present = 0
+    summary_only = 0
     dates: list[str] = []
     undated_count = 0
     for activity in activities:
@@ -447,16 +452,38 @@ def build_export_plan(
         output_file = (
             config.output_dir / "activities" / f"{extract_activity_id(activity)}.json"
         )
-        if config.skip_existing and output_file.exists():
+        if not config.skip_existing:
+            continue
+        if is_complete_export(output_file, config.include_details):
             already_present += 1
+        elif output_file.exists():
+            summary_only += 1
     return ExportPlan(
         total=len(activities),
         already_present=already_present,
         missing=len(activities) - already_present,
+        summary_only=summary_only,
         first_activity_date=min(dates) if dates else None,
         last_activity_date=max(dates) if dates else None,
         undated_count=undated_count,
     )
+
+
+def is_complete_export(path: Path, include_details: bool) -> bool:
+    if not path.exists():
+        return False
+    if not include_details:
+        return True
+    return has_detail_payload(path)
+
+
+def has_detail_payload(path: Path) -> bool:
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            head = file.read(DETAIL_PROBE_BYTES)
+    except OSError:
+        return False
+    return '"activity"' in head or '"details"' in head
 
 
 def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
@@ -469,6 +496,10 @@ def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
     ]
     if not config.skip_existing:
         lines[3] = "  Already on disk   : re-downloading, --no-skip-existing is set"
+    if plan.summary_only:
+        lines.append(
+            f"  Summary only      : {plan.summary_only} (details will be fetched)"
+        )
     if plan.undated_count:
         lines.append(f"  Without a date    : {plan.undated_count}")
     if plan.missing:
