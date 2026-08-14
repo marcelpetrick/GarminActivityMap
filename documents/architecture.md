@@ -87,7 +87,7 @@ flowchart LR
 - `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
 - `activity_map.loading` coordinates background loading and immutable prepared snapshots without blocking the GUI thread.
 - `activity_map.lod` selects screen-space detail under an explicit visible-point budget.
-- `activity_map.spatial` indexes projected track bounds and returns only viewport-intersecting tracks.
+- `activity_map.spatial` indexes projected track bounds, extends that index in place as new batches arrive, and returns only viewport-intersecting tracks.
 - `activity_map.qt_render` lazily retains requested Qt path levels and provides world transforms for batched drawing and cached backdrop geometry.
 - `activity_map.prepared_cache` stores versioned parsed-track and prepared-render snapshots under private local cache storage, keyed by source fingerprint and the geometry parameters that produced them, with atomic replacement and removal of superseded entries.
 - `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.

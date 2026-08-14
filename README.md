@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.66`
+- Version: `0.0.67`
 - Runtime: Python 3.12+ (`garminconnect` requires 3.12 or newer)
 
 ## Usage Terms

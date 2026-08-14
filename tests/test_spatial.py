@@ -46,6 +46,26 @@ def test_spatial_index_deduplicates_tracks_spanning_multiple_cells() -> None:
     assert visible == (0,)
 
 
+def test_extending_the_index_matches_a_full_rebuild() -> None:
+    tracks = prepare_tracks(
+        (
+            make_track("berlin", 52.5, 13.4),
+            make_track("sydney", -33.8, 151.2),
+            make_track("paris", 48.85, 2.35),
+        )
+    )
+    incremental = TrackSpatialIndex.build(tracks[:1], grid_size=64)
+
+    incremental.extend(tracks[1:])
+    rebuilt = TrackSpatialIndex.build(tracks, grid_size=64)
+
+    assert incremental.tracks == rebuilt.tracks
+    assert incremental.cells == rebuilt.cells
+    world = ProjectedBounds(0.0, 1.0, 0.0, 1.0)
+    assert incremental.query(world) == rebuilt.query(world) == (0, 1, 2)
+    assert incremental.query(tracks[2].bounds) == (2,)
+
+
 def test_viewport_bounds_includes_configured_screen_margin() -> None:
     viewport = Viewport(ProjectedPoint(0.5, 0.5), 1_000.0, 800, 600)
 

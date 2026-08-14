@@ -9,10 +9,10 @@ from .render import ProjectedBounds, RenderTrack
 DEFAULT_GRID_SIZE = 256
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class TrackSpatialIndex:
     tracks: tuple[RenderTrack, ...]
-    cells: dict[tuple[int, int], tuple[int, ...]]
+    cells: dict[tuple[int, int], list[int]]
     grid_size: int = DEFAULT_GRID_SIZE
 
     @classmethod
@@ -21,17 +21,17 @@ class TrackSpatialIndex:
         tracks: tuple[RenderTrack, ...],
         grid_size: int = DEFAULT_GRID_SIZE,
     ) -> TrackSpatialIndex:
-        pending: dict[tuple[int, int], list[int]] = {}
-        for track_index, track in enumerate(tracks):
-            min_x, max_x, min_y, max_y = bounds_cells(track.bounds, grid_size)
+        index = cls(tracks=(), cells={}, grid_size=grid_size)
+        index.extend(tracks)
+        return index
+
+    def extend(self, tracks: tuple[RenderTrack, ...]) -> None:
+        for track_index, track in enumerate(tracks, start=len(self.tracks)):
+            min_x, max_x, min_y, max_y = bounds_cells(track.bounds, self.grid_size)
             for x in range(min_x, max_x + 1):
                 for y in range(min_y, max_y + 1):
-                    pending.setdefault((x, y), []).append(track_index)
-        return cls(
-            tracks=tracks,
-            cells={cell: tuple(indexes) for cell, indexes in pending.items()},
-            grid_size=grid_size,
-        )
+                    self.cells.setdefault((x, y), []).append(track_index)
+        self.tracks += tracks
 
     def query(self, bounds: ProjectedBounds) -> tuple[int, ...]:
         min_x, max_x, min_y, max_y = bounds_cells(bounds, self.grid_size)

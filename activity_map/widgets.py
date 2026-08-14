@@ -169,7 +169,7 @@ class MapCanvas(QWidget):
         self.tracks += tracks
         self.render_tracks += render_tracks
         self.retained_track_paths += prepare_retained_paths(render_tracks)
-        self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
+        self.spatial_index.extend(render_tracks)
         if self.viewport_adjusted_by_user:
             self.update()
         else:
@@ -288,8 +288,10 @@ class MapCanvas(QWidget):
             return
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
-        self._draw_tracks(painter)
-        self._draw_track_names(painter)
+        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
+        self.last_visible_track_count = len(visible_indexes)
+        self._draw_tracks(painter, visible_indexes)
+        self._draw_track_names(painter, visible_indexes)
         self._draw_scale_bar(painter)
         self._draw_attribution(painter)
 
@@ -446,7 +448,11 @@ class MapCanvas(QWidget):
         )
         painter.restore()
 
-    def _draw_tracks(self, painter: QPainter) -> None:
+    def _draw_tracks(
+        self,
+        painter: QPainter,
+        visible_indexes: tuple[int, ...],
+    ) -> None:
         if not self.render_tracks or self.track_opacity <= 0:
             return
         painter.save()
@@ -455,8 +461,6 @@ class MapCanvas(QWidget):
         pen = QPen(color, 2.2, Qt.PenStyle.SolidLine)
         pen.setCosmetic(True)
         painter.setPen(pen)
-        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
-        self.last_visible_track_count = len(visible_indexes)
         self.last_path_draw_calls = 0
         if self.viewport.zoom > MARKER_MAX_ZOOM:
             painter.setWorldTransform(viewport_transform(self.viewport))
@@ -484,14 +488,17 @@ class MapCanvas(QWidget):
                     painter.drawEllipse(QPointF(screen.x, screen.y), 3.0, 3.0)
         painter.restore()
 
-    def _draw_track_names(self, painter: QPainter) -> None:
+    def _draw_track_names(
+        self,
+        painter: QPainter,
+        visible_indexes: tuple[int, ...],
+    ) -> None:
         if not self.track_names_visible or not self.render_tracks:
             return
         painter.save()
         label_font = QFont("Sans Serif", 8)
         painter.setFont(label_font)
         metrics = QFontMetrics(label_font)
-        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
         for index in visible_indexes:
             track = self.render_tracks[index]
             anchor = track_label_anchor(track)
