@@ -1,5 +1,10 @@
 # Garmin Activity Map
 
+[![Local Pipeline](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)](localPipeline.sh)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](#usage-terms)
+
 A private-first archive tool for turning a Garmin Connect account into a local, reusable activity dataset. It pulls activity summaries and detail payloads into JSON files so future analysis, dashboards, and visualizations can work from your own disk instead of repeatedly touching the Garmin service.
 
 ## TL;DR
@@ -31,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.60`
+- Version: `0.0.61`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -273,6 +278,19 @@ QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
 Current result for that focused check: `10 passed`; `activity_map/widgets.py`
 reports 95% coverage. The total shown by that scoped command is lower because
 the project-wide coverage configuration still includes non-UI modules.
+
+## Continuous Integration
+
+`.github/workflows/local-pipeline.yml` runs the same `./localPipeline.sh` on
+GitHub Actions for pushes to `master`, `main`, and `mpe/**`, for pull requests,
+and on manual dispatch. The job installs the Qt runtime libraries needed for
+offscreen PyQt6, exports `QT_QPA_PLATFORM=offscreen` and
+`ACTIVITY_MAP_DISABLE_TILES=1` so no OpenStreetMap tiles are requested from CI,
+and uploads the built packages and the generated documentation as artifacts.
+The Local Pipeline badge at the top of this file reflects that workflow on
+`master`. Because CI runs the identical script, a green badge means the same
+formatting, lint, typing, dead-code, complexity, architecture, docs, package
+build, test, coverage, performance, and smoke gates that run locally passed.
 
 Before a major automated operation, create a verified checkpoint and confirm
 the worktree is clean:

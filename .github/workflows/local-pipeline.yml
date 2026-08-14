@@ -1,0 +1,67 @@
+name: Local Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "mpe/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-pipeline:
+    name: Local pipeline replica
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      ACTIVITY_MAP_DISABLE_TILES: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxkbcommon-x11-0
+
+      - name: Run the local pipeline
+        run: ./localPipeline.sh
+
+      - name: Upload package artifacts
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: python-packages
+          path: dist/*
+          if-no-files-found: ignore
+
+      - name: Upload generated documentation
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: generated-docs
+          path: build/docs
+          if-no-files-found: ignore

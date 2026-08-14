@@ -131,6 +131,7 @@ sequenceDiagram
 - Generated docs, package builds, test caches, Garmin exports, and GUI output remain ignored.
 - Documentation must build with `python scripts/build_docs.py`.
 - The full local pipeline must pass before each commit.
+- The same pipeline runs on GitHub Actions through `.github/workflows/local-pipeline.yml`, offscreen and with tile downloads disabled.
 - Major automated operations require a clean committed checkpoint verified by `scripts/agentPreflight.sh`.
 - Work packages remain isolated in reviewable commits with architecture and verification decisions recorded in commit history and documentation.
 - Any new user-facing workflow should include synthetic tests or an offscreen smoke check where practical.
