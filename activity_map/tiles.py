@@ -80,7 +80,7 @@ class TileCache:
         try:
             self._pace_download()
             fetched = self._download_tile(coordinate)
-        except (OSError, urllib.error.URLError):
+        except OSError, urllib.error.URLError:
             return cached
 
         if not fetched:

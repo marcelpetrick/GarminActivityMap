@@ -354,7 +354,7 @@ def parse_optional_float(value: Any) -> float | None:
         return None
     try:
         parsed = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return parsed if math.isfinite(parsed) else None
 
@@ -370,7 +370,7 @@ def parse_timestamp(value: Any) -> datetime | None:
             seconds /= 1_000.0
         try:
             return datetime.fromtimestamp(seconds, tz=UTC)
-        except (OverflowError, OSError, ValueError):
+        except OverflowError, OSError, ValueError:
             return None
     if not isinstance(value, str) or not value.strip():
         return None
@@ -452,7 +452,7 @@ def track_bounds(points: Sequence[TrackPoint]) -> TrackBounds | None:
 def normalize_coordinate(value: Any, axis: str) -> float | None:
     try:
         coordinate = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
     if not math.isfinite(coordinate):

@@ -574,7 +574,7 @@ def activity_start_date(activity: dict[str, Any]) -> str | None:
                 seconds /= 1_000.0
             try:
                 return datetime.fromtimestamp(seconds, tz=UTC).date().isoformat()
-            except (OSError, OverflowError, ValueError):
+            except OSError, OverflowError, ValueError:
                 continue
     return None
 

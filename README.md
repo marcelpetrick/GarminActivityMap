@@ -1,7 +1,7 @@
 # Garmin Activity Map
 
 [![Local Pipeline](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)](localPipeline.sh)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 
@@ -36,8 +36,8 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.70`
-- Runtime: Python 3.12+ (`garminconnect` requires 3.12 or newer)
+- Version: `0.0.71`
+- Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Usage Terms
 
@@ -297,14 +297,18 @@ the project-wide coverage configuration still includes non-UI modules.
 
 `.github/workflows/local-pipeline.yml` runs the same `./localPipeline.sh` on
 GitHub Actions for pushes to `master`, `main`, and `mpe/**`, for pull requests,
-and on manual dispatch. The job installs the Qt runtime libraries needed for
+and on manual dispatch. The job runs on Python 3.14, the same version used for
+local development, installs the Qt runtime libraries needed for
 offscreen PyQt6, exports `QT_QPA_PLATFORM=offscreen` and
 `ACTIVITY_MAP_DISABLE_TILES=1` so no OpenStreetMap tiles are requested from CI,
 and uploads the built packages and the generated documentation as artifacts.
 The Local Pipeline badge at the top of this file reflects that workflow on
 `master`. Because CI runs the identical script, a green badge means the same
 formatting, lint, typing, dead-code, complexity, architecture, docs, package
-build, test, coverage, performance, and smoke gates that run locally passed.
+build, test, coverage, performance, and smoke gates that run locally passed. The
+badge stays grey until the workflow has completed a run on `master`, and GitHub
+caches badge images for a short while, so it can lag a minute behind a finished
+run.
 
 Before a major automated operation, create a verified checkpoint and confirm
 the worktree is clean:

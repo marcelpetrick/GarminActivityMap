@@ -73,7 +73,7 @@ class PreparedGeometryCache:
             ):
                 return None
             return decode_snapshot(dataset, value)
-        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        except KeyError, OSError, TypeError, ValueError, json.JSONDecodeError:
             return None
 
     def save(
