@@ -15,12 +15,15 @@ from garmin_export.cli import (
     ExportConfig,
     ExportProgress,
     RequestExecutor,
+    activity_start_date,
     build_client,
+    build_export_plan,
     collect_activities,
     collect_activities_by_date,
     date_range_label,
     export_activities,
     extract_activity_id,
+    format_duration,
     is_rate_limit_error,
     is_retryable_error,
     iter_activities,
@@ -34,6 +37,7 @@ from garmin_export.cli import (
 )
 from garmin_export.year_range import (
     YearRangeConfig,
+    describe_year_range_results,
     export_config_for_year,
     export_year_range,
     years_inclusive,
@@ -547,6 +551,141 @@ def test_date_range_label_describes_config() -> None:
     )
 
     assert date_range_label(config) == "all available dates"
+
+
+class DatedClient(FakeClient):
+    def get_activities_by_date(
+        self,
+        startdate: str,
+        enddate: str | None = None,
+        activitytype: str | None = None,
+        sortorder: str | None = None,
+    ) -> list[dict[str, Any]]:
+        self.date_calls.append((startdate, enddate, activitytype))
+        if startdate != "2025-01-01":
+            return []
+        return [
+            {"activityId": 301, "startTimeLocal": "2025-01-04 09:12:00"},
+            {"activityId": 302, "startTimeLocal": "2025-01-19 07:31:00"},
+            {"activityId": 303, "startTimeLocal": "2025-01-27 18:02:00"},
+        ]
+
+
+def dated_config(output_dir: Path) -> ExportConfig:
+    return ExportConfig(
+        output_dir=output_dir,
+        page_size=10,
+        include_details=True,
+        activity_type=None,
+        start_date="2025-01-01",
+        end_date="2025-12-31",
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+        skip_existing=True,
+    )
+
+
+def test_export_plan_reports_detected_range_and_missing_activities(
+    tmp_path: Path,
+) -> None:
+    config = dated_config(tmp_path)
+    activity_dir = tmp_path / "activities"
+    activity_dir.mkdir(parents=True)
+    (activity_dir / "301.json").write_text("{}", encoding="utf-8")
+    client = DatedClient()
+
+    plan = build_export_plan(collect_activities(client, config), config)
+
+    assert plan.total == 3
+    assert plan.already_present == 1
+    assert plan.missing == 2
+    assert plan.first_activity_date == "2025-01-04"
+    assert plan.last_activity_date == "2025-01-27"
+    assert plan.undated_count == 0
+
+
+def test_export_only_downloads_activities_missing_on_disk(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    activity_dir = tmp_path / "activities"
+    activity_dir.mkdir(parents=True)
+    (activity_dir / "301.json").write_text("{}", encoding="utf-8")
+    client = DatedClient()
+
+    result = export_activities(client, dated_config(tmp_path))
+
+    assert result.downloaded_count == 2
+    assert result.skipped_existing_count == 1
+    assert result.activity_count == 3
+    assert result.first_activity_date == "2025-01-04"
+    assert result.last_activity_date == "2025-01-27"
+    assert [call for call in client.detail_calls if call[1] == "301"] == []
+    assert ("details", "302") in client.detail_calls
+    assert (activity_dir / "301.json").read_text(encoding="utf-8") == "{}"
+
+    output = capsys.readouterr().out
+    assert "Activities listed : 3 from 2025-01-04 to 2025-01-27" in output
+    assert "Already on disk   : 1 (skipped)" in output
+    assert "Still to download : 2" in output
+    assert "Downloaded        : 2" in output
+
+
+def test_export_plan_reports_a_complete_local_export(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    activity_dir = tmp_path / "activities"
+    activity_dir.mkdir(parents=True)
+    for activity_id in (301, 302, 303):
+        (activity_dir / f"{activity_id}.json").write_text("{}", encoding="utf-8")
+    client = DatedClient()
+
+    result = export_activities(client, dated_config(tmp_path))
+
+    assert result.downloaded_count == 0
+    assert client.detail_calls == []
+    assert "Nothing to download" in capsys.readouterr().out
+
+
+def test_activity_start_date_reads_known_shapes() -> None:
+    assert (
+        activity_start_date({"startTimeLocal": "2025-03-04 07:00:00"}) == "2025-03-04"
+    )
+    assert activity_start_date({"startTimeGMT": "2025-03-04T07:00:00"}) == "2025-03-04"
+    assert activity_start_date({"beginTimestamp": 1_740_000_000_000}) is not None
+    assert activity_start_date({"startTimeLocal": "not-a-date"}) is None
+    assert activity_start_date({"activityId": 5}) is None
+
+
+def test_format_duration_scales_to_hours() -> None:
+    assert format_duration(-5) == "0s"
+    assert format_duration(45) == "45s"
+    assert format_duration(125) == "2m 05s"
+    assert format_duration(3_725) == "1h 02m 05s"
+
+
+def test_year_range_summary_lists_per_year_counts(tmp_path: Path) -> None:
+    client = DatedClient()
+    config = YearRangeConfig(
+        start_year=2025,
+        end_year=2025,
+        output_root=tmp_path,
+        page_size=10,
+        include_details=False,
+        activity_type=None,
+        tokenstore=None,
+        detail_delay_seconds=0,
+        detail_jitter_seconds=0,
+    )
+
+    results = export_year_range(client, config)
+    lines = describe_year_range_results(results)
+
+    assert "Newly downloaded  : 3" in lines[1]
+    assert "activities-2025: 3 new, 0 present, 0 failed" in lines[3]
+    assert "(2025-01-04 to 2025-01-27)" in lines[3]
 
 
 def test_years_inclusive_supports_descending_and_ascending_ranges() -> None:

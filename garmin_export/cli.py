@@ -21,6 +21,7 @@ DEFAULT_REQUEST_INTERVAL_SECONDS = 1.0
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_BACKOFF_INITIAL_SECONDS = 2.0
 DEFAULT_BACKOFF_MAX_SECONDS = 60.0
+PROGRESS_REPORT_INTERVAL = 10
 T = TypeVar("T")
 
 
@@ -76,6 +77,19 @@ class ExportResult:
     skipped_existing_count: int
     failed_count: int
     retry_count: int
+    downloaded_count: int = 0
+    first_activity_date: str | None = None
+    last_activity_date: str | None = None
+
+
+@dataclass(frozen=True)
+class ExportPlan:
+    total: int
+    already_present: int
+    missing: int
+    first_activity_date: str | None
+    last_activity_date: str | None
+    undated_count: int
 
 
 @dataclass
@@ -302,6 +316,7 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     activity_dir.mkdir(exist_ok=True)
 
     exported_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    started_at = monotonic_seconds()
     progress = ExportProgress(
         started_at=exported_at,
         updated_at=exported_at,
@@ -310,6 +325,8 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     executor = RequestExecutor(config, progress)
     files: list[str] = []
     skipped_existing_count = 0
+    downloaded_count = 0
+    print(f"Collecting Garmin activity list for {date_range_label(config)} ...")
     verbose_log(config.verbose, f"Collecting activities for {date_range_label(config)}")
     activities = collect_activities(client, config, executor)
     activity_total = len(activities)
@@ -317,6 +334,9 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     progress.pending = activity_total
     write_progress(config.output_dir, progress)
     verbose_log(config.verbose, f"Found {activity_total} activities")
+    plan = build_export_plan(activities, config)
+    for line in describe_plan(plan, config):
+        print(line)
 
     for index, activity in enumerate(activities, start=1):
         activity_id = extract_activity_id(activity)
@@ -377,9 +397,17 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
             f"{progress_label} wrote {relative_file.as_posix()}",
         )
         files.append(relative_file.as_posix())
+        downloaded_count += 1
         progress.completed += 1
         progress.pending -= 1
         update_progress(config.output_dir, progress)
+        if downloaded_count % PROGRESS_REPORT_INTERVAL == 0:
+            print(
+                f"  {progress_label} activities processed; "
+                f"{downloaded_count} downloaded, "
+                f"{skipped_existing_count} already present, "
+                f"{progress.failures} failed" + estimated_completion_label(progress)
+            )
 
     manifest = ExportResult(
         output_dir=str(config.output_dir),
@@ -393,9 +421,131 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
         skipped_existing_count=skipped_existing_count,
         failed_count=progress.failures,
         retry_count=progress.retries,
+        downloaded_count=downloaded_count,
+        first_activity_date=plan.first_activity_date,
+        last_activity_date=plan.last_activity_date,
     )
     write_json(config.output_dir / "manifest.json", asdict(manifest))
+    for line in describe_result(manifest, monotonic_seconds() - started_at):
+        print(line)
     return manifest
+
+
+def build_export_plan(
+    activities: Sequence[dict[str, Any]],
+    config: ExportConfig,
+) -> ExportPlan:
+    already_present = 0
+    dates: list[str] = []
+    undated_count = 0
+    for activity in activities:
+        activity_date = activity_start_date(activity)
+        if activity_date is None:
+            undated_count += 1
+        else:
+            dates.append(activity_date)
+        output_file = (
+            config.output_dir / "activities" / f"{extract_activity_id(activity)}.json"
+        )
+        if config.skip_existing and output_file.exists():
+            already_present += 1
+    return ExportPlan(
+        total=len(activities),
+        already_present=already_present,
+        missing=len(activities) - already_present,
+        first_activity_date=min(dates) if dates else None,
+        last_activity_date=max(dates) if dates else None,
+        undated_count=undated_count,
+    )
+
+
+def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
+    lines = [
+        f"Export plan for {date_range_label(config)}",
+        f"  Output directory  : {config.output_dir}",
+        f"  Activities listed : {plan.total}{covered_range_label(plan)}",
+        f"  Already on disk   : {plan.already_present} (skipped)",
+        f"  Still to download : {plan.missing}",
+    ]
+    if not config.skip_existing:
+        lines[3] = "  Already on disk   : re-downloading, --no-skip-existing is set"
+    if plan.undated_count:
+        lines.append(f"  Without a date    : {plan.undated_count}")
+    if plan.missing:
+        lines.append(
+            f"  Estimated runtime : {format_duration(estimated_seconds(plan, config))}"
+        )
+    else:
+        lines.append("  Nothing to download; the local export is already complete.")
+    return tuple(lines)
+
+
+def describe_result(result: ExportResult, elapsed_seconds: float) -> tuple[str, ...]:
+    return (
+        f"Export finished for {result.output_dir} in "
+        f"{format_duration(elapsed_seconds)}",
+        f"  Downloaded        : {result.downloaded_count}",
+        f"  Already present   : {result.skipped_existing_count}",
+        f"  Failed            : {result.failed_count} "
+        f"(retried {result.retry_count} times)",
+        f"  Manifest entries  : {result.activity_count}",
+    )
+
+
+def estimated_completion_label(progress: ExportProgress) -> str:
+    if progress.estimated_completion_at is None:
+        return ""
+    return f"; estimated completion {progress.estimated_completion_at}"
+
+
+def covered_range_label(plan: ExportPlan) -> str:
+    if plan.first_activity_date is None or plan.last_activity_date is None:
+        return ""
+    if plan.first_activity_date == plan.last_activity_date:
+        return f" on {plan.first_activity_date}"
+    return f" from {plan.first_activity_date} to {plan.last_activity_date}"
+
+
+def estimated_seconds(plan: ExportPlan, config: ExportConfig) -> float:
+    requests_per_activity = 2 if config.include_details else 0
+    per_activity = requests_per_activity * (
+        config.request_interval_seconds
+        + config.detail_delay_seconds
+        + config.detail_jitter_seconds / 2.0
+    )
+    return plan.missing * max(per_activity, config.request_interval_seconds)
+
+
+def format_duration(seconds: float) -> str:
+    total_seconds = max(int(seconds), 0)
+    hours, remainder = divmod(total_seconds, 3_600)
+    minutes, remaining_seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m {remaining_seconds:02d}s"
+    if minutes:
+        return f"{minutes}m {remaining_seconds:02d}s"
+    return f"{remaining_seconds}s"
+
+
+def activity_start_date(activity: dict[str, Any]) -> str | None:
+    for key in ("startTimeLocal", "startTimeGMT", "startDate", "beginTimestamp"):
+        value = activity.get(key)
+        if isinstance(value, str) and len(value) >= 10:
+            candidate = value[:10]
+            try:
+                datetime.strptime(candidate, "%Y-%m-%d")
+            except ValueError:
+                continue
+            return candidate
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            seconds = float(value)
+            if abs(seconds) > 10_000_000_000:
+                seconds /= 1_000.0
+            try:
+                return datetime.fromtimestamp(seconds, tz=UTC).date().isoformat()
+            except (OSError, OverflowError, ValueError):
+                continue
+    return None
 
 
 def collect_activities(

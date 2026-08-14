@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.59`
+- Version: `0.0.60`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -78,6 +78,32 @@ The exporter is intentionally conservative for detailed activity downloads:
 - HTTP 403, 429, 5xx, timeout, and network failures use bounded exponential backoff controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`.
 - `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities remain absent and are retried on the next run.
 
+Every run reports what it is doing without needing `--verbose`:
+
+```text
+Collecting Garmin activity list for 2025-01-01 to 2025-12-31 ...
+Export plan for 2025-01-01 to 2025-12-31
+  Output directory  : data/garmin/activities-2025
+  Activities listed : 312 from 2025-01-02 to 2025-12-30
+  Already on disk   : 300 (skipped)
+  Still to download : 12
+  Estimated runtime : 1m 24s
+  12/312 activities processed; 10 downloaded, 300 already present, 0 failed; estimated completion 2026-08-14T18:22:41+00:00
+Export finished for data/garmin/activities-2025 in 1m 31s
+  Downloaded        : 12
+  Already present   : 300
+  Failed            : 0 (retried 0 times)
+  Manifest entries  : 312
+```
+
+The activity list is always re-queried, because that is how new activities are
+detected, but only activities whose `activities/<activity-id>.json` file is
+missing are downloaded. A rerun of the same command therefore fills gaps -
+newly recorded activities and activities that failed earlier - instead of
+downloading the archive again. `--no-skip-existing` opts out and re-downloads
+everything. Add `--verbose` for a timestamped line per Garmin request, retry,
+and file write.
+
 For a cautious 2026 export:
 
 ```bash
@@ -100,6 +126,13 @@ The script writes to `data/garmin/activities-YYYY/` folders, uses
 `--detail-delay 2`, `--detail-jitter 2`, and `--verbose`, and accepts extra
 exporter flags at the end. For example, `./exportGarminYears.sh --no-details`
 exports summaries only.
+
+Before the first Garmin request the script prints the repository path, the
+interpreter it activated, the output root, the pacing flags, the extra flags it
+received, and a reminder that existing activity files are skipped. Each year
+then prints its own plan and completion block, and the run ends with a per-year
+summary of new, already present, and failed activities including the detected
+date range per year.
 
 Year export layout:
 

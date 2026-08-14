@@ -49,14 +49,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     client.login(config.tokenstore)
     results = export_year_range(client, config)
 
+    for line in describe_year_range_results(results):
+        print(line)
+    return 0
+
+
+def describe_year_range_results(results: list[ExportResult]) -> tuple[str, ...]:
     total_activities = sum(result.activity_count for result in results)
+    total_downloaded = sum(result.downloaded_count for result in results)
     total_skipped = sum(result.skipped_existing_count for result in results)
-    print(
+    total_failed = sum(result.failed_count for result in results)
+    lines = [
         "Finished Garmin year export: "
         f"{len(results)} years, {total_activities} manifest entries, "
-        f"{total_skipped} existing activity files skipped."
-    )
-    return 0
+        f"{total_skipped} existing activity files skipped.",
+        f"  Newly downloaded  : {total_downloaded}",
+        f"  Failed activities : {total_failed}",
+    ]
+    for result in results:
+        lines.append(
+            f"  {Path(result.output_dir).name}: "
+            f"{result.downloaded_count} new, "
+            f"{result.skipped_existing_count} present, "
+            f"{result.failed_count} failed" + year_range_label(result)
+        )
+    if total_failed:
+        lines.append(
+            "  Failed activities are not written to disk and are retried on the "
+            "next run of the same command."
+        )
+    return tuple(lines)
+
+
+def year_range_label(result: ExportResult) -> str:
+    if result.first_activity_date is None or result.last_activity_date is None:
+        return ""
+    return f" ({result.first_activity_date} to {result.last_activity_date})"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
@@ -180,7 +208,17 @@ def export_year_range(
     config: YearRangeConfig,
 ) -> list[ExportResult]:
     results: list[ExportResult] = []
-    for year in years_inclusive(config.start_year, config.end_year):
+    years = years_inclusive(config.start_year, config.end_year)
+    print(
+        f"Garmin year export: {len(years)} years "
+        f"({years[0]} to {years[-1]}) into {config.output_root}"
+    )
+    print(
+        "Existing activity files are kept and skipped, so only activities missing "
+        "on disk are downloaded."
+    )
+    for position, year in enumerate(years, start=1):
+        print(f"Year {year} ({position}/{len(years)})")
         verbose_log(config.verbose, f"Exporting Garmin activities for {year}")
         result = export_activities(client, export_config_for_year(config, year))
         results.append(result)
