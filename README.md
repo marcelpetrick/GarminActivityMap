@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.71`
+- Version: `0.0.72`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Usage Terms
@@ -114,7 +114,10 @@ A detailed run also completes activities that were previously exported with
 reported as `Summary only` in the plan and its `activity` and `details` payloads
 are fetched, so switching from a summary-only export to a full export fills the
 missing detail data instead of leaving those activities incomplete forever. A
-summary-only run leaves such files untouched.
+summary-only run leaves such files untouched. Detection reads the head of each
+stored file and falls back to parsing it completely when that is inconclusive,
+so a file written with a different key order is recognised as complete instead
+of being downloaded again.
 
 For a cautious 2026 export:
 

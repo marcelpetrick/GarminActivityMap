@@ -26,6 +26,7 @@ from garmin_export.cli import (
     export_activities,
     extract_activity_id,
     format_duration,
+    has_detail_payload,
     is_rate_limit_error,
     is_retryable_error,
     iter_activities,
@@ -705,6 +706,28 @@ def test_summary_only_files_are_kept_when_details_are_disabled(tmp_path: Path) -
     assert result.skipped_existing_count == 1
     assert result.downloaded_count == 2
     assert client.detail_calls == []
+
+
+def test_detail_detection_falls_back_to_parsing_the_whole_file(
+    tmp_path: Path,
+) -> None:
+    foreign = tmp_path / "foreign.json"
+    foreign.write_text(
+        json.dumps({"summary": {"note": "x" * 2_000}, "details": {"metrics": []}}),
+        encoding="utf-8",
+    )
+    summary_only = tmp_path / "summary-only.json"
+    summary_only.write_text(
+        json.dumps({"summary": {"note": "x" * 2_000}}),
+        encoding="utf-8",
+    )
+    truncated = tmp_path / "truncated.json"
+    truncated.write_text('{"summary": {"note": "x', encoding="utf-8")
+
+    assert has_detail_payload(foreign) is True
+    assert has_detail_payload(summary_only) is False
+    assert has_detail_payload(truncated) is False
+    assert has_detail_payload(tmp_path / "missing.json") is False
 
 
 def test_activity_start_date_reads_known_shapes() -> None:

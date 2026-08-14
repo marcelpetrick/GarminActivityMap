@@ -23,6 +23,7 @@ DEFAULT_BACKOFF_INITIAL_SECONDS = 2.0
 DEFAULT_BACKOFF_MAX_SECONDS = 60.0
 PROGRESS_REPORT_INTERVAL = 10
 DETAIL_PROBE_BYTES = 512
+DETAIL_KEYS = frozenset({"activity", "details"})
 T = TypeVar("T")
 
 
@@ -481,9 +482,16 @@ def has_detail_payload(path: Path) -> bool:
     try:
         with path.open("r", encoding="utf-8") as file:
             head = file.read(DETAIL_PROBE_BYTES)
-    except OSError:
+            if contains_detail_key(head):
+                return True
+            payload = json.loads(head + file.read())
+    except OSError, ValueError:
         return False
-    return '"activity"' in head or '"details"' in head
+    return isinstance(payload, dict) and not DETAIL_KEYS.isdisjoint(payload)
+
+
+def contains_detail_key(head: str) -> bool:
+    return any(f'"{key}"' in head for key in DETAIL_KEYS)
 
 
 def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
