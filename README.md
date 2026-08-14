@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.57`
+- Version: `0.0.58`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -133,7 +133,7 @@ that may be capped by Garmin.
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under ignored `data/map_tiles/`; repeat views use the local cache, and panning or zooming automatically requests newly visible tiles.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
 
 Expected local layout:
 

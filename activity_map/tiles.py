@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import os
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -20,6 +22,7 @@ TILE_SIZE = 256
 MIN_TILE_ZOOM = 0
 MAX_TILE_ZOOM = 18
 MIN_CACHE_SECONDS = 7 * 24 * 60 * 60
+TILE_CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_TILE_CACHE_DIR"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,12 +41,12 @@ class TileBounds:
 class TileCache:
     def __init__(
         self,
-        root: Path = Path("data/map_tiles/osm"),
+        root: Path | None = None,
         url_template: str = OSM_TILE_URL,
         user_agent: str = OSM_USER_AGENT,
         minimum_cache_seconds: int = MIN_CACHE_SECONDS,
     ) -> None:
-        self.root = root
+        self.root = (root or default_tile_cache_directory()).expanduser()
         self.url_template = url_template
         self.user_agent = user_agent
         self.minimum_cache_seconds = minimum_cache_seconds
@@ -59,6 +62,9 @@ class TileCache:
             return None
         return path.read_bytes()
 
+    def discard_tile(self, coordinate: TileCoordinate) -> None:
+        self.tile_path(coordinate).unlink(missing_ok=True)
+
     def fetch_tile(self, coordinate: TileCoordinate) -> bytes | None:
         cached = self.load_cached_tile(coordinate)
         path = self.tile_path(coordinate)
@@ -72,9 +78,26 @@ class TileCache:
 
         if not fetched:
             return cached
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(fetched)
+        self._store_tile(path, fetched)
         return fetched
+
+    def _store_tile(self, path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                delete=False,
+            ) as temporary:
+                temporary_path = Path(temporary.name)
+                temporary.write(data)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            temporary_path.replace(path)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
 
     def _is_fresh(self, path: Path) -> bool:
         age_seconds = time.time() - path.stat().st_mtime
@@ -91,6 +114,15 @@ class TileCache:
         )
         with urllib.request.urlopen(request, timeout=8.0) as response:
             return cast(bytes, response.read())
+
+
+def default_tile_cache_directory() -> Path:
+    configured = os.environ.get(TILE_CACHE_DIRECTORY_ENVIRONMENT)
+    if configured:
+        return Path(configured)
+    cache_home = os.environ.get("XDG_CACHE_HOME")
+    root = Path(cache_home) if cache_home else Path.home() / ".cache"
+    return root / "GarminActivityMap" / "map_tiles" / "osm"
 
 
 def viewport_tile_zoom(viewport: Viewport) -> int:

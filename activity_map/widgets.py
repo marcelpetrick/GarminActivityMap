@@ -119,6 +119,7 @@ class MapCanvas(QWidget):
         self.tile_cache = TileCache()
         self.tile_pixmaps: dict[TileCoordinate, QPixmap] = {}
         self.pending_tiles: set[TileCoordinate] = set()
+        self.unusable_tiles: set[TileCoordinate] = set()
         self.tile_executor = ThreadPoolExecutor(max_workers=4)
         self.tile_signals = TileSignals()
         self.tile_signals.loaded.connect(self._store_tile)
@@ -387,12 +388,13 @@ class MapCanvas(QWidget):
             return None
         loaded = QPixmap()
         if not loaded.loadFromData(cached):
+            self.tile_cache.discard_tile(coordinate)
             return None
         self.tile_pixmaps[coordinate] = loaded
         return loaded
 
     def _request_tile(self, coordinate: TileCoordinate) -> None:
-        if coordinate in self.pending_tiles:
+        if coordinate in self.pending_tiles or coordinate in self.unusable_tiles:
             return
         self.pending_tiles.add(coordinate)
         future = self.tile_executor.submit(self.tile_cache.fetch_tile, coordinate)
@@ -425,6 +427,9 @@ class MapCanvas(QWidget):
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
             self.tile_pixmaps[coordinate] = pixmap
+        else:
+            self.unusable_tiles.add(coordinate)
+            self.tile_cache.discard_tile(coordinate)
         self.pending_tiles.discard(coordinate)
         self.update()
 

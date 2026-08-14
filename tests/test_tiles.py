@@ -8,8 +8,10 @@ from activity_map.geo import ProjectedPoint, Viewport
 from activity_map.tiles import (
     MAX_TILE_ZOOM,
     MIN_CACHE_SECONDS,
+    TILE_CACHE_DIRECTORY_ENVIRONMENT,
     TileCache,
     TileCoordinate,
+    default_tile_cache_directory,
     tile_bounds,
     viewport_tile_zoom,
     visible_tiles,
@@ -134,6 +136,50 @@ def test_tile_cache_returns_none_when_tile_is_missing_and_download_fails(
 
     assert cache.fetch_tile(coordinate) is None
     assert cache.downloads == 1
+
+
+def test_tile_cache_writes_leave_no_partial_files(tmp_path: Path) -> None:
+    coordinate = TileCoordinate(zoom=3, x=2, y=5)
+    cache = StubTileCache(root=tmp_path, result=b"tile-bytes")
+
+    assert cache.fetch_tile(coordinate) == b"tile-bytes"
+    path = cache.tile_path(coordinate)
+    assert path.read_bytes() == b"tile-bytes"
+    assert sorted(entry.name for entry in path.parent.iterdir()) == [path.name]
+
+
+def test_discard_tile_removes_unreadable_cache_entry(tmp_path: Path) -> None:
+    coordinate = TileCoordinate(zoom=1, x=1, y=1)
+    cache = StubTileCache(root=tmp_path)
+    path = cache.tile_path(coordinate)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"truncated")
+
+    cache.discard_tile(coordinate)
+
+    assert not path.exists()
+    cache.discard_tile(coordinate)
+
+
+def test_default_tile_cache_directory_is_outside_the_working_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(TILE_CACHE_DIRECTORY_ENVIRONMENT, raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    assert default_tile_cache_directory() == (
+        tmp_path / "cache" / "GarminActivityMap" / "map_tiles" / "osm"
+    )
+
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "home"))
+    assert default_tile_cache_directory() == (
+        tmp_path / "home" / ".cache" / "GarminActivityMap" / "map_tiles" / "osm"
+    )
+
+    monkeypatch.setenv(TILE_CACHE_DIRECTORY_ENVIRONMENT, str(tmp_path / "configured"))
+    assert default_tile_cache_directory() == tmp_path / "configured"
+    assert TileCache().root == tmp_path / "configured"
 
 
 def test_cache_rejects_unexpected_download_assertion(tmp_path: Path) -> None:

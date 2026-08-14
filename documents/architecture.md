@@ -101,7 +101,7 @@ The code-level design keeps private-data handling and UI rendering separated:
 
 - Export credentials are accepted at runtime by `garmin_export.cli` and passwords are never read from files or environment variables.
 - Raw Garmin payloads stay under ignored local directories such as `data/` or `exports/`.
-- Downloaded map tiles stay under ignored `data/map_tiles/`.
+- Downloaded map tiles stay under the private platform cache directory, `ACTIVITY_MAP_TILE_CACHE_DIR` when set, and never under the current working directory.
 - Parser, projection, and render-cache logic use typed pure Python objects so they can be unit tested without private data.
 - PyQt widgets consume already parsed models and render caches, keeping GUI smoke tests practical in offscreen mode.
 - Tests use synthetic GPS fixtures only.

@@ -314,6 +314,41 @@ def test_canvas_tile_cache_and_future_paths(
     canvas._store_tile(coordinate, b"invalid")
 
 
+def test_unreadable_tiles_are_discarded_and_not_requested_again(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    canvas.tile_cache.root = tmp_path
+    coordinate = TileCoordinate(2, 1, 1)
+    path = canvas.tile_cache.tile_path(coordinate)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"truncated")
+
+    assert canvas._tile_pixmap(coordinate) is None
+    assert not path.exists()
+
+    submitted: list[TileCoordinate] = []
+
+    class RecordingExecutor:
+        def submit(self, operation: object, selected: TileCoordinate) -> Future[bytes]:
+            submitted.append(selected)
+            future: Future[bytes] = Future()
+            future.set_result(b"still not an image")
+            return future
+
+    canvas.tile_executor.shutdown(wait=False, cancel_futures=True)
+    canvas.tile_executor = RecordingExecutor()  # type: ignore[assignment]
+    canvas._request_tile(coordinate)
+    assert submitted == [coordinate]
+    assert coordinate in canvas.unusable_tiles
+    assert coordinate not in canvas.pending_tiles
+
+    canvas._request_tile(coordinate)
+    assert submitted == [coordinate]
+
+
 def test_canvas_renders_tiles_markers_lines_names_and_attribution(
     qtbot: QtBot,
     monkeypatch: pytest.MonkeyPatch,
