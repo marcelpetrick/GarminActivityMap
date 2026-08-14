@@ -3,7 +3,7 @@
 [![Local Pipeline](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)](localPipeline.sh)
-[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](#usage-terms)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 
 A private-first archive tool for turning a Garmin Connect account into a local, reusable activity dataset. It pulls activity summaries and detail payloads into JSON files so future analysis, dashboards, and visualizations can work from your own disk instead of repeatedly touching the Garmin service.
 
@@ -36,12 +36,12 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.63`
+- Version: `0.0.64`
 - Runtime: Python 3.12+ (`garminconnect` requires 3.12 or newer)
 
 ## Usage Terms
 
-This project is distributed under the GNU General Public License v3.0. You may use, study, modify, and redistribute it under the terms of GPLv3.
+This project is distributed under the GNU General Public License v3.0. You may use, study, modify, and redistribute it under the terms of GPLv3. The full license text is in `LICENSE`, and the package metadata declares the SPDX expression `GPL-3.0-or-later`, so the license ships inside the built wheel and source distribution.
 
 ## Setup
 
