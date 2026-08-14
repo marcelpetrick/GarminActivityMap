@@ -106,7 +106,8 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 12. Garmin export throttling [done]
    - Add configurable delay and jitter before detailed Garmin activity calls.
    - Skip existing activity files by default so interrupted exports can resume safely.
-   - Stop immediately on Garmin rate-limit responses instead of retrying aggressively.
+   - Pace every Garmin request and retry 403, 429, 5xx, timeout, and network
+     failures with bounded exponential backoff instead of hammering the service.
    - Document a cautious 2026 export command.
 
 13. Track rendering clarity [done]
@@ -133,6 +134,41 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Draw each visible name in a tiny but readable font near the lower-left of its rendered track.
    - Keep labels off by default so dense maps stay clean.
    - Test the toggle state and label placement logic with synthetic activity names.
+
+17. Interactive rendering performance [done]
+   - Retain `QPainterPath` geometry per level of detail and materialize each
+     level lazily on first paint.
+   - Cull to the viewport through a uniform-grid spatial index that is extended
+     in place while batches arrive.
+   - Select level of detail from screen-space error under an explicit visible
+     vertex budget instead of a fixed zoom threshold.
+   - Transform a cached raster during active gestures and refine after input
+     settles.
+   - Record measurements per phase in `documents/speed_improvements20260623.md`.
+
+18. Asynchronous loading and prepared caching [done]
+   - Load and prepare tracks on a background executor and publish batches so
+     tracks appear before the archive finishes.
+   - Keep the previously loaded archive visible until the new selection
+     produces data, and stop refitting the map once the user pans or zooms.
+   - Reuse parsed tracks and prepared geometry from a versioned local cache
+     keyed by source fingerprint and geometry parameters.
+
+19. Export observability and gap filling [done]
+   - Report an export plan, the detected activity date range, progress, and a
+     completion summary without requiring `--verbose`.
+   - Download only activities missing on disk, and complete summary-only files
+     when details are requested.
+   - Default the year range to the current calendar year back through 2017 so
+     the running year is always covered.
+
+20. Project hygiene [done]
+   - Ship the GPLv3 text and declare the license in package metadata.
+   - Require Python 3.12, matching what the Garmin client supports.
+   - Run `./localPipeline.sh` in GitHub Actions on 3.12 and 3.14 and show the
+     status badge in the README.
+   - Keep map tiles in the platform cache directory, write them atomically, and
+     pace downloads to respect the OpenStreetMap usage policy.
 
 ## Done Criteria
 

@@ -129,7 +129,9 @@ stale cache entries fall back to the ordinary loader without failing the GUI.
 The loader and process-preparation APIs support multiple workers, but measured
 defaults remain one worker because four threads did not improve local SSD JSON
 loading and four processes were slower after serialization. Tile network and
-disk work continues in its independent four-worker pool.
+disk work continues in an independent two-worker pool whose downloads share a
+minimum interval, so the provider sees a paced request stream instead of a
+burst.
 
 ## Module and Thread Boundaries
 
@@ -145,7 +147,7 @@ flowchart TB
     Q[Qt raster paint engine]
   end
 
-  subgraph WORKERS["ThreadPoolExecutor: four tile workers"]
+  subgraph WORKERS["ThreadPoolExecutor: two paced tile workers"]
     TC[activity_map.tiles.TileCache.fetch_tile]
   end
 
@@ -228,28 +230,34 @@ require another per-point transform and would worsen the same bottleneck.
 Tilt should only be introduced after the renderer has retained geometry,
 culling, and preferably GPU-backed transforms.
 
-## Recent Commit Effects
+## Status as of 2026-08-14
 
-The latest commits reviewed were `9ff3430`, `d9fca57`, `785160e`, `303032f`,
-`97e5a1d`, `36718d1`, `a291e8a`, `2c2accd`, and `93be602`.
+The commit-by-commit notes that used to live here described the state before
+the performance work packages landed and are superseded by
+`speed_improvements20260623.md`, which records the measured result of each
+phase. The current state of this pipeline is:
 
-- `2c2accd` added cached full, simplified, and marker geometry. This materially
-  improves broad and intermediate zoom, but deep zoom still submits full
-  geometry every frame.
-- `93be602` added timestamp/speed validation and invalid-segment splitting. It
-  improves correctness but adds an `O(P)` loading pass; render preparation then
-  performs another geodesic-distance pass to split large jumps.
-- `36718d1` added settings persistence. It is not a rendering bottleneck,
-  although slider changes synchronously write settings and request repaints.
-- `d9fca57` synchronized controls and legend state. It has no material map
-  performance effect.
-- `9ff3430` raised coverage and added branch-focused GUI tests. It does not add
-  a sustained frame-time or interaction performance gate.
-- `a291e8a` strengthened static and architecture checks but currently does not
-  benchmark rendering regressions.
+- retained `QPainterPath` levels, viewport culling through a uniform grid
+  index, screen-space level-of-detail selection under a vertex budget, and a
+  gesture raster cache are all in place; refined 2,000-track frames measure a
+  few milliseconds on the reference machine;
+- loading and pure render preparation run on a background executor and publish
+  prepared batches of 50 tracks, so tracks appear while the archive is still
+  being read;
+- parsed tracks and prepared geometry are reused from a versioned disk cache
+  keyed by the source fingerprint and the geometry parameters that produced the
+  snapshot;
+- retained Qt paths are materialised lazily, per level, the first time a level
+  is painted;
+- the spatial index is extended in place as batches arrive rather than rebuilt
+  per batch, and each frame performs exactly one viewport query that both the
+  track and label passes consume;
+- `localPipeline.sh` gates load-to-first-display for 1,000 synthetic tracks at
+  eight seconds, and the same script runs in GitHub Actions.
 
 The architecture remains clean at the package-dependency level, but
-`activity_map.widgets` owns data loading orchestration, tile lifecycle,
+`activity_map.widgets` still owns data loading orchestration, tile lifecycle,
 interaction policy, render traversal, and low-level painting. That
-concentration makes it difficult to profile, parallelize, or replace the
-renderer independently.
+concentration remains the main obstacle to profiling, parallelizing, or
+replacing the renderer independently, and is the natural next work package if
+the renderer has to change again.
