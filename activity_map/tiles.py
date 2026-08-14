@@ -24,6 +24,8 @@ MIN_TILE_ZOOM = 0
 MAX_TILE_ZOOM = 18
 MIN_CACHE_SECONDS = 7 * 24 * 60 * 60
 MIN_DOWNLOAD_INTERVAL_SECONDS = 0.2
+DOWNLOAD_BURST = 24
+MIN_SLEEP_SECONDS = 0.001
 TILE_CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_TILE_CACHE_DIR"
 
 
@@ -48,12 +50,14 @@ class TileCache:
         user_agent: str = OSM_USER_AGENT,
         minimum_cache_seconds: int = MIN_CACHE_SECONDS,
         minimum_download_interval_seconds: float = MIN_DOWNLOAD_INTERVAL_SECONDS,
+        download_burst: int = DOWNLOAD_BURST,
     ) -> None:
         self.root = (root or default_tile_cache_directory()).expanduser()
         self.url_template = url_template
         self.user_agent = user_agent
         self.minimum_cache_seconds = minimum_cache_seconds
         self.minimum_download_interval_seconds = minimum_download_interval_seconds
+        self.download_burst = max(download_burst, 1)
         self._download_lock = threading.Lock()
         self._next_download_at = 0.0
 
@@ -111,11 +115,13 @@ class TileCache:
             return
         with self._download_lock:
             now = monotonic_seconds()
-            remaining = self._next_download_at - now
-            if remaining > 0:
-                sleep_seconds(remaining)
-                now = self._next_download_at
-            self._next_download_at = now + self.minimum_download_interval_seconds
+            burst_credit = (
+                self.download_burst - 1
+            ) * self.minimum_download_interval_seconds
+            scheduled = max(self._next_download_at, now - burst_credit)
+            if scheduled - now > MIN_SLEEP_SECONDS:
+                sleep_seconds(scheduled - now)
+            self._next_download_at = scheduled + self.minimum_download_interval_seconds
 
     def _is_fresh(self, path: Path) -> bool:
         age_seconds = time.time() - path.stat().st_mtime

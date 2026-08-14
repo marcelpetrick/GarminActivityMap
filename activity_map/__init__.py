@@ -1,3 +1,3 @@
 """Activity map data loading and visualization package."""
 
-__version__ = "0.0.72"
+__version__ = "0.0.73"

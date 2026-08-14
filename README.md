@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.72`
+- Version: `0.0.73`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Usage Terms
@@ -188,7 +188,7 @@ that may be capped by Garmin.
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers and downloads are paced to at most five per second across all of them; tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers, with a burst of 24 downloads allowed so a fresh view fills immediately and a sustained ceiling of five downloads per second across all workers afterwards; tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
 
 Expected local layout:
 

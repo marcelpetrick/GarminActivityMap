@@ -26,10 +26,12 @@ class StubTileCache(TileCache):
         result: bytes | None = None,
         error: Exception | None = None,
         minimum_download_interval_seconds: float = 0.0,
+        download_burst: int = 1,
     ) -> None:
         super().__init__(
             root=root,
             minimum_download_interval_seconds=minimum_download_interval_seconds,
+            download_burst=download_burst,
         )
         self.result = result
         self.error = error
@@ -207,21 +209,26 @@ def test_downloads_are_paced_but_cached_tiles_are_not(
         root=tmp_path,
         result=b"tile",
         minimum_download_interval_seconds=0.2,
+        download_burst=3,
     )
 
-    cache.fetch_tile(TileCoordinate(zoom=2, x=0, y=0))
+    for x in range(3):
+        cache.fetch_tile(TileCoordinate(zoom=2, x=x, y=0))
     assert slept == []
 
-    cache.fetch_tile(TileCoordinate(zoom=2, x=1, y=0))
+    cache.fetch_tile(TileCoordinate(zoom=2, x=3, y=0))
     assert slept == [pytest.approx(0.2)]
+
+    cache.fetch_tile(TileCoordinate(zoom=2, x=4, y=0))
+    assert slept == [pytest.approx(0.2), pytest.approx(0.2)]
 
     clock[0] += 5.0
-    cache.fetch_tile(TileCoordinate(zoom=2, x=2, y=0))
-    assert slept == [pytest.approx(0.2)]
+    cache.fetch_tile(TileCoordinate(zoom=2, x=5, y=0))
+    assert len(slept) == 2
 
     cache.fetch_tile(TileCoordinate(zoom=2, x=0, y=0))
-    assert cache.downloads == 3
-    assert slept == [pytest.approx(0.2)]
+    assert cache.downloads == 6
+    assert len(slept) == 2
 
 
 def test_cache_rejects_unexpected_download_assertion(tmp_path: Path) -> None:
