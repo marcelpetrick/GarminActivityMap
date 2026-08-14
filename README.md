@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.58`
+- Version: `0.0.59`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -184,8 +184,13 @@ and full validated geometry when zoomed in.
 
 Parsed tracks and prepared geometry are cached under the platform cache
 directory for faster repeat startup. Cache entries are keyed by the resolved
-dataset path plus every activity file's relative path, size, and modification
-time, and are written atomically with user-only permissions. Set
+dataset path, the geometry parameters that produced the snapshot (level-of-detail
+tolerances, simplification tolerance, segment-split distance, minimum rendered
+points, and the speed threshold), plus every activity file's relative path, size,
+and modification time, and are written atomically with user-only permissions.
+Changing any of those parameters produces a new cache entry instead of silently
+reusing geometry prepared by an older build, and superseded entries for the same
+dataset are removed. Set
 `ACTIVITY_MAP_PREPARED_CACHE_DIR` to relocate this cache or
 `ACTIVITY_MAP_DISABLE_PREPARED_CACHE=1` to disable it.
 

@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 import activity_map.loading as loading
+import activity_map.prepared_cache as prepared_cache
 from activity_map.loader import load_directory, load_directory_parallel
 from activity_map.loading import PreparedLoad, load_and_prepare_directory
-from activity_map.prepared_cache import PreparedGeometryCache
+from activity_map.prepared_cache import PreparedGeometryCache, dataset_identity
 
 
 @pytest.fixture(autouse=True)
@@ -120,6 +121,37 @@ def test_prepared_cache_ignores_corrupt_and_disabled_entries(
 
     monkeypatch.setenv("ACTIVITY_MAP_DISABLE_PREPARED_CACHE", "1")
     assert cache.load(tmp_path, fingerprint) is None
+
+
+def test_prepared_cache_invalidates_changed_geometry_parameters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    write_track(dataset / "one.json", 1)
+    load_and_prepare_directory(dataset)
+
+    monkeypatch.setattr(prepared_cache, "LOD_TOLERANCES", (0.001, 0.0005))
+    cache = PreparedGeometryCache()
+    fingerprint = cache.fingerprint(dataset)
+
+    assert cache.load(dataset, fingerprint) is None
+
+    reloaded: list[Path] = []
+
+    def recording_loader(path: Path, **_kwargs: object) -> object:
+        reloaded.append(path)
+        return load_directory(path)
+
+    monkeypatch.setattr(loading, "load_directory_parallel", recording_loader)
+    load_and_prepare_directory(dataset)
+
+    assert reloaded == [dataset]
+    snapshots = sorted(
+        path.name for path in cache.root.glob(f"{dataset_identity(dataset)}-*.json")
+    )
+    assert len(snapshots) == 1
 
 
 def test_missing_directory_report_is_not_cached(tmp_path: Path) -> None:

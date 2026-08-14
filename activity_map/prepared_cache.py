@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .geo import ProjectedPoint
+from .loader import DEFAULT_MAX_SEGMENT_SPEED_KMH
 from .models import (
     ActivityTrack,
     LoadReport,
@@ -18,6 +19,9 @@ from .models import (
     TrackSegment,
 )
 from .render import (
+    LOD_TOLERANCES,
+    MAX_CONTINUOUS_SEGMENT_METERS,
+    MIN_RENDERED_TRACK_POINTS,
     SIMPLIFICATION_TOLERANCE,
     ProjectedBounds,
     RenderLevel,
@@ -64,6 +68,7 @@ class PreparedGeometryCache:
             if (
                 not isinstance(value, dict)
                 or value.get("schema") != CACHE_SCHEMA_VERSION
+                or value.get("parameters") != geometry_signature()
                 or decode_fingerprint(value.get("fingerprint")) != fingerprint
             ):
                 return None
@@ -101,10 +106,33 @@ class PreparedGeometryCache:
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
+        self.discard_outdated_snapshots(dataset)
 
     def cache_path(self, dataset: Path) -> Path:
-        identity = hashlib.sha256(str(dataset.resolve()).encode("utf-8")).hexdigest()
-        return self.root / f"{identity}.json"
+        return self.root / f"{dataset_identity(dataset)}-{geometry_signature()}.json"
+
+    def discard_outdated_snapshots(self, dataset: Path) -> None:
+        current = self.cache_path(dataset)
+        for path in self.root.glob(f"{dataset_identity(dataset)}-*.json"):
+            if path != current:
+                path.unlink(missing_ok=True)
+
+
+def dataset_identity(dataset: Path) -> str:
+    return hashlib.sha256(str(dataset.resolve()).encode("utf-8")).hexdigest()
+
+
+def geometry_signature() -> str:
+    parameters = {
+        "schema": CACHE_SCHEMA_VERSION,
+        "lod_tolerances": list(LOD_TOLERANCES),
+        "simplification_tolerance": SIMPLIFICATION_TOLERANCE,
+        "max_continuous_segment_meters": MAX_CONTINUOUS_SEGMENT_METERS,
+        "min_rendered_track_points": MIN_RENDERED_TRACK_POINTS,
+        "max_segment_speed_kmh": DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    }
+    encoded = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def default_cache_directory() -> Path:
@@ -132,6 +160,7 @@ def encode_snapshot(
 ) -> dict[str, Any]:
     return {
         "schema": CACHE_SCHEMA_VERSION,
+        "parameters": geometry_signature(),
         "fingerprint": fingerprint,
         "files_read": report.files_read,
         "warnings": [
