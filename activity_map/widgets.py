@@ -289,7 +289,11 @@ class MapCanvas(QWidget):
             return
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
-        visible_indexes = self.spatial_index.query(viewport_bounds(self.viewport))
+        visible_indexes = (
+            self.spatial_index.query(viewport_bounds(self.viewport))
+            if self.render_tracks
+            else ()
+        )
         self.last_visible_track_count = len(visible_indexes)
         self._draw_tracks(painter, visible_indexes)
         self._draw_track_names(painter, visible_indexes)

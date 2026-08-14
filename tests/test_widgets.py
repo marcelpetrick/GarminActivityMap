@@ -19,7 +19,8 @@ from activity_map.models import (
     LoadWarning,
     TrackPoint,
 )
-from activity_map.render import prepare_tracks
+from activity_map.render import ProjectedBounds, prepare_tracks
+from activity_map.spatial import TrackSpatialIndex
 from activity_map.tiles import TileCoordinate
 from activity_map.widgets import MainWindow, MapCanvas, gesture_transform
 
@@ -237,6 +238,40 @@ def test_appended_batches_keep_a_user_adjusted_viewport(qtbot: QtBot) -> None:
     canvas.reset_view()
     assert not canvas.viewport_adjusted_by_user
     assert canvas.viewport != panned
+
+
+class CountingSpatialIndex:
+    def __init__(self, index: TrackSpatialIndex) -> None:
+        self.index = index
+        self.queries: list[ProjectedBounds] = []
+
+    def query(self, bounds: ProjectedBounds) -> tuple[int, ...]:
+        self.queries.append(bounds)
+        return self.index.query(bounds)
+
+
+def test_empty_canvas_paints_without_querying_the_spatial_index(
+    qtbot: QtBot,
+) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(400, 300)
+    counting = CountingSpatialIndex(canvas.spatial_index)
+    canvas.spatial_index = counting  # type: ignore[assignment]
+
+    canvas.render_to_pixmap()
+    assert counting.queries == []
+    assert canvas.visible_track_count == 0
+
+    track = synthetic_track()
+    canvas.set_prepared_tracks((track,), prepare_tracks((track,)))
+    counting = CountingSpatialIndex(canvas.spatial_index)
+    canvas.spatial_index = counting  # type: ignore[assignment]
+    canvas.track_names_visible = True
+
+    canvas.render_to_pixmap()
+    assert len(counting.queries) == 1
+    assert canvas.visible_track_count == 1
 
 
 def test_gesture_transform_maps_source_center_to_target_view(
