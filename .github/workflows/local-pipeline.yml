@@ -14,9 +14,13 @@ permissions:
 
 jobs:
   local-pipeline:
-    name: Local pipeline replica
+    name: Local pipeline replica (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
     env:
       QT_QPA_PLATFORM: offscreen
       ACTIVITY_MAP_DISABLE_TILES: "1"
@@ -30,7 +34,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "${{ matrix.python-version }}"
 
       - name: Install system dependencies
         run: |
@@ -54,7 +58,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: python-packages
+          name: python-packages-${{ matrix.python-version }}
           path: dist/*
           if-no-files-found: ignore
 
@@ -62,6 +66,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: generated-docs
+          name: generated-docs-${{ matrix.python-version }}
           path: build/docs
           if-no-files-found: ignore

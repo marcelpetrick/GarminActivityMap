@@ -1,7 +1,7 @@
 # Garmin Activity Map
 
 [![Local Pipeline](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)](localPipeline.sh)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](#usage-terms)
 
@@ -36,8 +36,8 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.62`
-- Runtime: Python 3.11+
+- Version: `0.0.63`
+- Runtime: Python 3.12+ (`garminconnect` requires 3.12 or newer)
 
 ## Usage Terms
 

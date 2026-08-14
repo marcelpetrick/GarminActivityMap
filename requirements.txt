@@ -1,5 +1,4 @@
-garminconnect==0.3.2; python_version < "3.12"
-garminconnect==0.3.10; python_version >= "3.12"
+garminconnect==0.3.10
 curl-cffi==0.16.0
 PyQt6==6.11.0
 PyQt6-Qt6==6.11.1
