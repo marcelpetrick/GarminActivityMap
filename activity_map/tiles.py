@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,7 @@ TILE_SIZE = 256
 MIN_TILE_ZOOM = 0
 MAX_TILE_ZOOM = 18
 MIN_CACHE_SECONDS = 7 * 24 * 60 * 60
+MIN_DOWNLOAD_INTERVAL_SECONDS = 0.2
 TILE_CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_TILE_CACHE_DIR"
 
 
@@ -45,11 +47,15 @@ class TileCache:
         url_template: str = OSM_TILE_URL,
         user_agent: str = OSM_USER_AGENT,
         minimum_cache_seconds: int = MIN_CACHE_SECONDS,
+        minimum_download_interval_seconds: float = MIN_DOWNLOAD_INTERVAL_SECONDS,
     ) -> None:
         self.root = (root or default_tile_cache_directory()).expanduser()
         self.url_template = url_template
         self.user_agent = user_agent
         self.minimum_cache_seconds = minimum_cache_seconds
+        self.minimum_download_interval_seconds = minimum_download_interval_seconds
+        self._download_lock = threading.Lock()
+        self._next_download_at = 0.0
 
     def tile_path(self, coordinate: TileCoordinate) -> Path:
         return (
@@ -72,6 +78,7 @@ class TileCache:
             return cached
 
         try:
+            self._pace_download()
             fetched = self._download_tile(coordinate)
         except (OSError, urllib.error.URLError):
             return cached
@@ -99,6 +106,17 @@ class TileCache:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
 
+    def _pace_download(self) -> None:
+        if self.minimum_download_interval_seconds <= 0:
+            return
+        with self._download_lock:
+            now = monotonic_seconds()
+            remaining = self._next_download_at - now
+            if remaining > 0:
+                sleep_seconds(remaining)
+                now = self._next_download_at
+            self._next_download_at = now + self.minimum_download_interval_seconds
+
     def _is_fresh(self, path: Path) -> bool:
         age_seconds = time.time() - path.stat().st_mtime
         return age_seconds < self.minimum_cache_seconds
@@ -114,6 +132,14 @@ class TileCache:
         )
         with urllib.request.urlopen(request, timeout=8.0) as response:
             return cast(bytes, response.read())
+
+
+def monotonic_seconds() -> float:
+    return time.monotonic()
+
+
+def sleep_seconds(delay: float) -> None:
+    time.sleep(delay)
 
 
 def default_tile_cache_directory() -> Path:

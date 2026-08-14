@@ -83,6 +83,7 @@ TRACK = QColor(45, 220, 255, 150)
 TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
 GESTURE_SETTLE_MILLISECONDS = 60
+TILE_WORKERS = 2
 
 
 class TileSignals(QObject):
@@ -120,7 +121,7 @@ class MapCanvas(QWidget):
         self.tile_pixmaps: dict[TileCoordinate, QPixmap] = {}
         self.pending_tiles: set[TileCoordinate] = set()
         self.unusable_tiles: set[TileCoordinate] = set()
-        self.tile_executor = ThreadPoolExecutor(max_workers=4)
+        self.tile_executor = ThreadPoolExecutor(max_workers=TILE_WORKERS)
         self.tile_signals = TileSignals()
         self.tile_signals.loaded.connect(self._store_tile)
         self._last_drag_pos: QPoint | None = None

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import activity_map.tiles as tiles
 from activity_map.geo import ProjectedPoint, Viewport
 from activity_map.tiles import (
     MAX_TILE_ZOOM,
@@ -24,8 +25,12 @@ class StubTileCache(TileCache):
         root: Path,
         result: bytes | None = None,
         error: Exception | None = None,
+        minimum_download_interval_seconds: float = 0.0,
     ) -> None:
-        super().__init__(root=root)
+        super().__init__(
+            root=root,
+            minimum_download_interval_seconds=minimum_download_interval_seconds,
+        )
         self.result = result
         self.error = error
         self.downloads = 0
@@ -180,6 +185,43 @@ def test_default_tile_cache_directory_is_outside_the_working_directory(
     monkeypatch.setenv(TILE_CACHE_DIRECTORY_ENVIRONMENT, str(tmp_path / "configured"))
     assert default_tile_cache_directory() == tmp_path / "configured"
     assert TileCache().root == tmp_path / "configured"
+
+
+def test_downloads_are_paced_but_cached_tiles_are_not(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    slept: list[float] = []
+
+    def fake_monotonic() -> float:
+        return clock[0]
+
+    def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+        clock[0] += delay
+
+    monkeypatch.setattr(tiles, "monotonic_seconds", fake_monotonic)
+    monkeypatch.setattr(tiles, "sleep_seconds", fake_sleep)
+    cache = StubTileCache(
+        root=tmp_path,
+        result=b"tile",
+        minimum_download_interval_seconds=0.2,
+    )
+
+    cache.fetch_tile(TileCoordinate(zoom=2, x=0, y=0))
+    assert slept == []
+
+    cache.fetch_tile(TileCoordinate(zoom=2, x=1, y=0))
+    assert slept == [pytest.approx(0.2)]
+
+    clock[0] += 5.0
+    cache.fetch_tile(TileCoordinate(zoom=2, x=2, y=0))
+    assert slept == [pytest.approx(0.2)]
+
+    cache.fetch_tile(TileCoordinate(zoom=2, x=0, y=0))
+    assert cache.downloads == 3
+    assert slept == [pytest.approx(0.2)]
 
 
 def test_cache_rejects_unexpected_download_assertion(tmp_path: Path) -> None:

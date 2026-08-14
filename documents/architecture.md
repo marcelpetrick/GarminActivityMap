@@ -90,7 +90,7 @@ flowchart LR
 - `activity_map.spatial` indexes projected track bounds, extends that index in place as new batches arrive, and returns only viewport-intersecting tracks.
 - `activity_map.qt_render` lazily retains requested Qt path levels and provides world transforms for batched drawing and cached backdrop geometry.
 - `activity_map.prepared_cache` stores versioned parsed-track and prepared-render snapshots under private local cache storage, keyed by source fingerprint and the geometry parameters that produced them, with atomic replacement and removal of superseded entries.
-- `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity.
+- `activity_map.tiles` chooses visible OpenStreetMap raster tiles, reads local cached tiles, and downloads missing tiles with a stable request identity and a shared download pace that respects the provider's usage policy.
 - `activity_map.settings` loads and atomically persists versioned user preferences with validation and safe fallback defaults.
 - `activity_map.widgets` owns the PyQt window, controls, canvas drawing, and user interaction.
 - `activity_map.app` provides `python -m activity_map` and the non-interactive smoke entry point.
