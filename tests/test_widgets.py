@@ -520,6 +520,97 @@ def test_duplicate_load_request_does_not_queue_a_second_job(
     qtbot.waitUntil(lambda: window.report == report)
 
 
+def test_reload_keeps_previous_tracks_visible_until_new_data_arrives(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = Event()
+    previous = synthetic_track()
+    replacement = ActivityTrack(
+        activity_id="replacement",
+        name="Replacement Track",
+        source_file=Path("replacement.json"),
+        points=(
+            TrackPoint(48.85, 2.35),
+            TrackPoint(48.86, 2.36),
+            TrackPoint(48.87, 2.37),
+        ),
+    )
+    report = LoadReport(tmp_path, 1, (replacement,), ())
+    prepared = prepare_tracks((replacement,))
+
+    def blocking_load(
+        _path: Path,
+        _loader_workers: int,
+        _preparation_workers: int,
+        _progress: object,
+    ) -> PreparedLoad:
+        assert release.wait(timeout=5)
+        return PreparedLoad(report, prepared)
+
+    monkeypatch.setattr(widgets, "load_and_prepare_directory", blocking_load)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.canvas.set_prepared_tracks((previous,), prepare_tracks((previous,)))
+
+    window.load_path(tmp_path)
+
+    assert [track.activity_id for track in window.canvas.render_tracks] == [
+        "interactive"
+    ]
+    assert window.status_label.text().startswith("Loading ")
+
+    release.set()
+    qtbot.waitUntil(lambda: window.report == report)
+    assert [track.activity_id for track in window.canvas.render_tracks] == [
+        "replacement"
+    ]
+
+
+def test_synchronous_loads_replace_the_previous_dataset(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = synthetic_track()
+    second = ActivityTrack(
+        activity_id="second",
+        name="Second Track",
+        source_file=Path("second.json"),
+        points=(
+            TrackPoint(-33.80, 151.20),
+            TrackPoint(-33.81, 151.21),
+            TrackPoint(-33.82, 151.22),
+        ),
+    )
+    loads = iter(
+        (
+            PreparedLoad(
+                LoadReport(tmp_path, 1, (first,), ()), prepare_tracks((first,))
+            ),
+            PreparedLoad(
+                LoadReport(tmp_path, 1, (second,), ()), prepare_tracks((second,))
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        widgets,
+        "load_and_prepare_directory",
+        lambda _path: next(loads),
+    )
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.load_path_sync(tmp_path)
+    assert [track.activity_id for track in window.canvas.render_tracks] == [
+        "interactive"
+    ]
+
+    window.load_path_sync(tmp_path)
+    assert [track.activity_id for track in window.canvas.render_tracks] == ["second"]
+
+
 def test_partial_load_progress_installs_tracks_before_completion(
     tmp_path: Path,
     qtbot: QtBot,

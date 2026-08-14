@@ -569,6 +569,7 @@ class MainWindow(QMainWindow):
         self.load_signals.completed.connect(self._apply_load_result)
         self.load_signals.failed.connect(self._apply_load_failure)
         self._load_generation = 0
+        self._installed_generation: int | None = None
         self._active_load_path: Path | None = None
         self._active_load_future: Future[PreparedLoad] | None = None
         self.settings_store = settings_store or SettingsStore()
@@ -710,7 +711,6 @@ class MainWindow(QMainWindow):
         generation = self._load_generation
         self._active_load_path = resolved_path
         self.report = None
-        self.canvas.set_prepared_tracks((), ())
         self.status_label.setText(f"Loading {path}...")
         self.warning_label.setText("")
         future = self.load_executor.submit(
@@ -748,7 +748,10 @@ class MainWindow(QMainWindow):
         self.report = result.report
         self._active_load_path = None
         self._active_load_future = None
-        if not self.canvas.render_tracks:
+        if self._installed_generation != generation or len(
+            self.canvas.render_tracks
+        ) != len(result.render_tracks):
+            self._installed_generation = generation
             self.canvas.set_prepared_tracks(self.report.tracks, result.render_tracks)
         self.status_label.setText(
             f"{len(self.report.tracks)} tracks, "
@@ -772,9 +775,16 @@ class MainWindow(QMainWindow):
     def _apply_load_progress(self, generation: int, result: PreparedLoad) -> None:
         if generation != self._load_generation:
             return
-        previous_count = len(self.canvas.tracks)
-        new_tracks = result.report.tracks[previous_count:]
-        self.canvas.append_prepared_tracks(new_tracks, result.render_tracks)
+        if self._installed_generation != generation:
+            self._installed_generation = generation
+            self.canvas.set_prepared_tracks(
+                result.report.tracks,
+                result.render_tracks,
+            )
+        else:
+            previous_count = len(self.canvas.tracks)
+            new_tracks = result.report.tracks[previous_count:]
+            self.canvas.append_prepared_tracks(new_tracks, result.render_tracks)
         self.status_label.setText(
             f"Loading... {len(result.report.tracks)} tracks, "
             f"{result.report.point_count} points"
