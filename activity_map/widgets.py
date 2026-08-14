@@ -110,6 +110,7 @@ class MapCanvas(QWidget):
         self.last_selected_point_count = 0
         self.last_lod_tolerance = 0.0
         self.viewport = fit_viewport(None, 960, 540)
+        self.viewport_adjusted_by_user = False
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
         self.track_names_visible = False
@@ -164,15 +165,18 @@ class MapCanvas(QWidget):
         tracks: tuple[ActivityTrack, ...],
         render_tracks: tuple[RenderTrack, ...],
     ) -> None:
-        self.finish_gesture()
         self.tracks += tracks
         self.render_tracks += render_tracks
         self.retained_track_paths += prepare_retained_paths(render_tracks)
         self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
-        self.reset_view()
+        if self.viewport_adjusted_by_user:
+            self.update()
+        else:
+            self.reset_view()
 
     def reset_view(self) -> None:
         self.finish_gesture()
+        self.viewport_adjusted_by_user = False
         bounds = combined_projected_bounds(self.render_tracks)
         if bounds is None:
             self.viewport = fit_viewport(
@@ -242,6 +246,7 @@ class MapCanvas(QWidget):
         delta = current - self._last_drag_pos
         self._last_drag_pos = current
         self.viewport = self.viewport.pan(delta.x(), delta.y())
+        self.viewport_adjusted_by_user = True
         self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
@@ -267,6 +272,7 @@ class MapCanvas(QWidget):
             factor,
             ScreenPoint(position.x(), position.y()),
         )
+        self.viewport_adjusted_by_user = True
         self._gesture_timer.start(GESTURE_SETTLE_MILLISECONDS)
         self.update()
 

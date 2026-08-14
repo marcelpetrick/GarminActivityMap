@@ -163,6 +163,82 @@ def test_canvas_mouse_navigation_and_resize(qtbot: QtBot) -> None:
     assert canvas.viewport.height == canvas.height()
 
 
+def test_appended_batches_keep_a_user_adjusted_viewport(qtbot: QtBot) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(800, 500)
+    first = ActivityTrack(
+        activity_id="first",
+        name="First",
+        source_file=Path("first.json"),
+        points=(
+            TrackPoint(52.50, 13.40),
+            TrackPoint(52.51, 13.41),
+            TrackPoint(52.52, 13.42),
+        ),
+    )
+    second = ActivityTrack(
+        activity_id="second",
+        name="Second",
+        source_file=Path("second.json"),
+        points=(
+            TrackPoint(-33.80, 151.20),
+            TrackPoint(-33.81, 151.21),
+            TrackPoint(-33.82, 151.22),
+        ),
+    )
+    canvas.set_prepared_tracks((first,), prepare_tracks((first,)))
+    fitted = canvas.viewport
+
+    canvas.append_prepared_tracks((second,), prepare_tracks((second,)))
+    assert canvas.viewport != fitted
+
+    canvas.mousePressEvent(
+        mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(100, 100),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+        )
+    )
+    canvas.mouseMoveEvent(
+        mouse_event(
+            QMouseEvent.Type.MouseMove,
+            QPointF(140, 130),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.LeftButton,
+        )
+    )
+    canvas.mouseReleaseEvent(
+        mouse_event(
+            QMouseEvent.Type.MouseButtonRelease,
+            QPointF(140, 130),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.NoButton,
+        )
+    )
+    panned = canvas.viewport
+    assert canvas.viewport_adjusted_by_user
+
+    third = ActivityTrack(
+        activity_id="third",
+        name="Third",
+        source_file=Path("third.json"),
+        points=(
+            TrackPoint(48.85, 2.35),
+            TrackPoint(48.86, 2.36),
+            TrackPoint(48.87, 2.37),
+        ),
+    )
+    canvas.append_prepared_tracks((third,), prepare_tracks((third,)))
+    assert canvas.viewport == panned
+    assert len(canvas.render_tracks) == 3
+
+    canvas.reset_view()
+    assert not canvas.viewport_adjusted_by_user
+    assert canvas.viewport != panned
+
+
 def test_gesture_transform_maps_source_center_to_target_view(
     qtbot: QtBot,
 ) -> None:

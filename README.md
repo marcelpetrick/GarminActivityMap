@@ -31,7 +31,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.56`
+- Version: `0.0.57`
 - Runtime: Python 3.11+
 
 ## Usage Terms
@@ -157,6 +157,7 @@ Controls:
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
+- While a directory is still loading, the map keeps fitting each newly arriving batch of tracks until you pan or zoom. After that the view stays where you put it, and Reset View or a double-click hands control back to automatic fitting.
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 
 The app persists the last loaded directory, last run timestamp, track color,
