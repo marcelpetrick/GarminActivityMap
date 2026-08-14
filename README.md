@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.65`
+- Version: `0.0.66`
 - Runtime: Python 3.12+ (`garminconnect` requires 3.12 or newer)
 
 ## Usage Terms
@@ -127,8 +127,8 @@ python -m garmin_export \
   --detail-jitter 5
 ```
 
-To export full years from 2025 back through 2017 into separate ignored folders,
-enter the Garmin password once at startup and run:
+To export full years from the current calendar year back through 2017 into
+separate ignored folders, enter the Garmin password once at startup and run:
 
 ```bash
 ./exportGarminYears.sh
@@ -138,6 +138,13 @@ The script writes to `data/garmin/activities-YYYY/` folders, uses
 `--detail-delay 2`, `--detail-jitter 2`, and `--verbose`, and accepts extra
 exporter flags at the end. For example, `./exportGarminYears.sh --no-details`
 exports summaries only.
+
+The first year is the current calendar year, so the running year's activities
+are always included; `--start-year` and `--end-year` override the range. If the
+map is missing recent activities, check that a folder for the current year
+exists under `data/garmin/` and that its export completed - an interrupted run
+leaves `export-state.json` with a non-zero `pending` count and writes no
+`manifest.json`.
 
 Before the first Garmin request the script prints the repository path, the
 interpreter it activated, the output root, the pacing flags, the extra flags it

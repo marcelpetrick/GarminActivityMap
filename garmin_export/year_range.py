@@ -4,6 +4,7 @@ import argparse
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from .cli import (
@@ -18,7 +19,6 @@ from .cli import (
     verbose_log,
 )
 
-DEFAULT_START_YEAR = 2025
 DEFAULT_END_YEAR = 2017
 DEFAULT_OUTPUT_ROOT = Path("data/garmin")
 DEFAULT_DETAIL_DELAY_SECONDS = 2.0
@@ -81,6 +81,10 @@ def describe_year_range_results(results: list[ExportResult]) -> tuple[str, ...]:
     return tuple(lines)
 
 
+def default_start_year() -> int:
+    return date.today().year
+
+
 def year_range_label(result: ExportResult) -> str:
     if result.first_activity_date is None or result.last_activity_date is None:
         return ""
@@ -97,8 +101,8 @@ def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
     parser.add_argument(
         "--start-year",
         type=int,
-        default=DEFAULT_START_YEAR,
-        help=f"First year to export. Default: {DEFAULT_START_YEAR}",
+        default=default_start_year(),
+        help="First year to export. Default: the current calendar year.",
     )
     parser.add_argument(
         "--end-year",

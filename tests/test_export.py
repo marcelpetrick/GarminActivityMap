@@ -4,6 +4,7 @@ import os
 import sys
 from argparse import ArgumentParser
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -38,6 +39,7 @@ from garmin_export.cli import (
 )
 from garmin_export.year_range import (
     YearRangeConfig,
+    default_start_year,
     describe_year_range_results,
     export_config_for_year,
     export_year_range,
@@ -759,15 +761,26 @@ def test_years_inclusive_supports_descending_and_ascending_ranges() -> None:
     assert years_inclusive(2024, 2026) == (2024, 2025, 2026)
 
 
-def test_year_range_args_default_to_2025_through_2017() -> None:
+def test_year_range_args_default_to_the_current_year_through_2017() -> None:
     config = parse_year_range_args(["--verbose"])
 
-    assert config.start_year == 2025
+    assert config.start_year == date.today().year
+    assert config.start_year == default_start_year()
     assert config.end_year == 2017
     assert config.output_root == Path("data/garmin")
     assert config.detail_delay_seconds == 2.0
     assert config.detail_jitter_seconds == 2.0
     assert config.verbose is True
+
+
+def test_default_year_range_covers_the_current_year() -> None:
+    config = parse_year_range_args([])
+
+    years = years_inclusive(config.start_year, config.end_year)
+
+    assert years[0] == date.today().year
+    assert years[-1] == 2017
+    assert len(years) == date.today().year - 2016
 
 
 def test_export_config_for_year_uses_resumable_activity_directory(
