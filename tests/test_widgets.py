@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from concurrent.futures import Future
+from datetime import UTC, date, datetime
 from pathlib import Path
 from threading import Event
 
 import pytest
-from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QPoint, QPointF, Qt
+from PyQt6.QtCore import QBuffer, QByteArray, QDate, QIODevice, QPoint, QPointF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import QColorDialog, QFileDialog
 from pytestqt.qtbot import QtBot
@@ -20,6 +21,7 @@ from activity_map.models import (
     TrackPoint,
 )
 from activity_map.render import ProjectedBounds, prepare_tracks
+from activity_map.settings import SettingsStore
 from activity_map.spatial import TrackSpatialIndex
 from activity_map.tiles import TileCoordinate
 from activity_map.widgets import MainWindow, MapCanvas, gesture_transform
@@ -679,3 +681,131 @@ def test_partial_load_progress_installs_tracks_before_completion(
     release.set()
     qtbot.waitUntil(lambda: window.report == report)
     assert len(window.canvas.render_tracks) == 1
+
+
+def dated_activity(activity_id: str, day: int | None) -> ActivityTrack:
+    stamp = None if day is None else datetime(2026, 6, day, 7, 0, tzinfo=UTC)
+    return ActivityTrack(
+        activity_id=activity_id,
+        name=activity_id,
+        source_file=Path(f"{activity_id}.json"),
+        points=(
+            TrackPoint(52.50 + day * 0.01 if day else 52.50, 13.40, stamp),
+            TrackPoint(52.51 + day * 0.01 if day else 52.51, 13.41, stamp),
+            TrackPoint(52.52 + day * 0.01 if day else 52.52, 13.42, stamp),
+        ),
+    )
+
+
+def dated_window(qtbot: QtBot) -> MainWindow:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    tracks = (
+        dated_activity("june-2", 2),
+        dated_activity("june-9", 9),
+        dated_activity("june-20", 20),
+        dated_activity("undated", None),
+    )
+    window.canvas.set_prepared_tracks(tracks, prepare_tracks(tracks))
+    return window
+
+
+def test_typed_dates_filter_the_rendered_tracks(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+    assert window.canvas.filtered_track_count == 4
+
+    window.start_date_field.setText("2026-06-02")
+    window.end_date_field.setText("2026-06-09")
+    window.apply_date_filter()
+
+    assert window.canvas.filtered_track_count == 2
+    assert window.canvas.date_filter_start == date(2026, 6, 2)
+    assert window.canvas.date_filter_end == date(2026, 6, 9)
+    assert "2 of 4 tracks in range" in window.date_filter_label.text()
+    assert window.settings.date_filter_start == "2026-06-02"
+    assert window.settings.date_filter_end == "2026-06-09"
+
+    window.canvas.resize(400, 300)
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 2
+
+
+def test_open_ended_and_cleared_date_filters(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+
+    window.start_date_field.setText("2026-06-09")
+    window.apply_date_filter()
+    assert window.canvas.filtered_track_count == 2
+
+    window.start_date_field.clear()
+    window.end_date_field.setText("2026-06-02")
+    window.apply_date_filter()
+    assert window.canvas.filtered_track_count == 1
+
+    window.clear_date_filter()
+    assert window.canvas.filtered_indexes is None
+    assert window.canvas.filtered_track_count == 4
+    assert window.settings.date_filter_start is None
+    assert "All 4 tracks shown" in window.date_filter_label.text()
+
+
+def test_invalid_date_text_is_reported_and_does_not_filter(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+
+    window.start_date_field.setText("02.06.2026")
+    window.apply_date_filter()
+
+    assert window.canvas.filtered_indexes is None
+    assert "earliest" in window.date_filter_label.text()
+    assert "YYYY-MM-DD" in window.date_filter_label.text()
+    assert window.start_date_field.styleSheet() != ""
+
+    window.start_date_field.setText("2026-06-09")
+    window.apply_date_filter()
+    assert window.start_date_field.styleSheet() == ""
+    assert window.canvas.filtered_track_count == 2
+
+
+def test_inverted_range_reports_that_nothing_matches(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+
+    window.start_date_field.setText("2026-06-20")
+    window.end_date_field.setText("2026-06-02")
+    window.apply_date_filter()
+
+    assert window.canvas.filtered_track_count == 0
+
+
+def test_calendar_picker_writes_a_date_into_the_field(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+
+    window.pick_start_date()
+    assert window._active_calendar_widget is not None
+    window._active_calendar_widget.clicked.emit(QDate(2026, 6, 9))
+
+    assert window.start_date_field.text() == "2026-06-09"
+    assert window.canvas.date_filter_start == date(2026, 6, 9)
+    assert window._active_calendar is None
+
+    window.pick_end_date()
+    assert window._active_calendar_widget is not None
+    window._active_calendar_widget.clicked.emit(QDate(2026, 6, 20))
+    assert window.end_date_field.text() == "2026-06-20"
+    assert window.canvas.filtered_track_count == 2
+
+
+def test_persisted_date_filter_is_restored_on_the_next_start(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    store = SettingsStore(tmp_path / "settings.json")
+    first = MainWindow(store)
+    qtbot.addWidget(first)
+    first.start_date_field.setText("2026-06-09")
+    first.apply_date_filter()
+
+    second = MainWindow(SettingsStore(tmp_path / "settings.json"))
+    qtbot.addWidget(second)
+
+    assert second.start_date_field.text() == "2026-06-09"
+    assert second.canvas.date_filter_start == date(2026, 6, 9)

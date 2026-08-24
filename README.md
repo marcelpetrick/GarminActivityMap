@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.75`
+- Version: `0.0.76`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Usage Terms
@@ -209,6 +209,7 @@ Controls:
 - Track Color: choose one shared color for all rendered activity tracks.
 - Track Opacity: make individual routes lighter or stronger.
 - Show track names: draw each Garmin activity name near its rendered track.
+- Date range: limit the map to activities recorded in a period. Both fields take a date typed as `YYYY-MM-DD`, and the `Pick` button next to each opens a calendar that writes the same format back into the field. Leave a field empty for an open-ended range, fill neither to show everything, and use `Show all dates` to clear both. The line below the fields reports how many of the loaded tracks are in range. A date is applied when you press Enter or leave the field; unparseable text is reported, highlighted, and ignored rather than silently dropping tracks. While a range is active, activities whose export carries no timestamp cannot be placed in time and are hidden.
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
@@ -216,8 +217,8 @@ Controls:
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 
 The app persists the last loaded directory, last run timestamp, track color,
-track-name visibility, track/map opacity, map-layer state, and future preference
-fields in `~/.config/GarminActivityMap/settings.json`. Missing or corrupt files
+track-name visibility, track/map opacity, map-layer state, the active date
+range, and future preference fields in `~/.config/GarminActivityMap/settings.json`. Missing or corrupt files
 fall back to safe defaults. Set `ACTIVITY_MAP_SETTINGS_PATH` to use a different
 location.
 

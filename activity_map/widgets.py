@@ -3,10 +3,19 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QDate,
+    QObject,
+    QPoint,
+    QPointF,
+    QRectF,
+    Qt,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QCloseEvent,
     QColor,
@@ -22,12 +31,15 @@ from PyQt6.QtGui import (
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
+    QCalendarWidget,
     QCheckBox,
     QColorDialog,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QSlider,
@@ -36,6 +48,8 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __version__
+from .dates import format_date, parse_date_text
+from .filters import tracks_in_range
 from .geo import (
     ScreenPoint,
     Viewport,
@@ -112,6 +126,9 @@ class MapCanvas(QWidget):
         self.last_lod_tolerance = 0.0
         self.viewport = fit_viewport(None, 960, 540)
         self.viewport_adjusted_by_user = False
+        self.date_filter_start: date | None = None
+        self.date_filter_end: date | None = None
+        self.filtered_indexes: frozenset[int] | None = None
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
         self.track_names_visible = False
@@ -134,6 +151,12 @@ class MapCanvas(QWidget):
     @property
     def total_track_count(self) -> int:
         return len(self.render_tracks)
+
+    @property
+    def filtered_track_count(self) -> int:
+        if self.filtered_indexes is None:
+            return len(self.render_tracks)
+        return len(self.filtered_indexes)
 
     @property
     def visible_track_count(self) -> int:
@@ -160,6 +183,7 @@ class MapCanvas(QWidget):
         self.render_tracks = render_tracks
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
         self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
+        self.refresh_date_filter()
         self.reset_view()
 
     def append_prepared_tracks(
@@ -171,15 +195,46 @@ class MapCanvas(QWidget):
         self.render_tracks += render_tracks
         self.retained_track_paths += prepare_retained_paths(render_tracks)
         self.spatial_index.extend(render_tracks)
+        self.refresh_date_filter()
         if self.viewport_adjusted_by_user:
             self.update()
         else:
             self.reset_view()
 
+    def set_date_filter(self, start: date | None, end: date | None) -> None:
+        self.date_filter_start = start
+        self.date_filter_end = end
+        self.refresh_date_filter()
+        self.reset_view()
+
+    def refresh_date_filter(self) -> None:
+        if self.date_filter_start is None and self.date_filter_end is None:
+            self.filtered_indexes = None
+            return
+        self.filtered_indexes = tracks_in_range(
+            self.render_tracks,
+            self.date_filter_start,
+            self.date_filter_end,
+        )
+
+    def filtered_render_tracks(self) -> tuple[RenderTrack, ...]:
+        if self.filtered_indexes is None:
+            return self.render_tracks
+        return tuple(
+            self.render_tracks[index] for index in sorted(self.filtered_indexes)
+        )
+
+    def selected_indexes(self, visible_indexes: tuple[int, ...]) -> tuple[int, ...]:
+        if self.filtered_indexes is None:
+            return visible_indexes
+        return tuple(
+            index for index in visible_indexes if index in self.filtered_indexes
+        )
+
     def reset_view(self) -> None:
         self.finish_gesture()
         self.viewport_adjusted_by_user = False
-        bounds = combined_projected_bounds(self.render_tracks)
+        bounds = combined_projected_bounds(self.filtered_render_tracks())
         if bounds is None:
             self.viewport = fit_viewport(
                 None, max(self.width(), 1), max(self.height(), 1)
@@ -289,7 +344,7 @@ class MapCanvas(QWidget):
             return
         self._draw_backdrop(painter)
         self._draw_tiles(painter)
-        visible_indexes = (
+        visible_indexes = self.selected_indexes(
             self.spatial_index.query(viewport_bounds(self.viewport))
             if self.render_tracks
             else ()
@@ -612,6 +667,22 @@ class MainWindow(QMainWindow):
         self.track_names_checkbox.setChecked(self.settings.show_track_names)
         self.track_names_checkbox.toggled.connect(self.set_track_names_visible)
 
+        self.start_date_field, self.start_date_button = date_input_row("Earliest date")
+        self.end_date_field, self.end_date_button = date_input_row("Latest date")
+        self.start_date_field.setText(self.settings.date_filter_start or "")
+        self.end_date_field.setText(self.settings.date_filter_end or "")
+        self.start_date_field.editingFinished.connect(self.apply_date_filter)
+        self.end_date_field.editingFinished.connect(self.apply_date_filter)
+        self.start_date_button.clicked.connect(self.pick_start_date)
+        self.end_date_button.clicked.connect(self.pick_end_date)
+        self.clear_dates_button = QPushButton("Show all dates")
+        self.clear_dates_button.clicked.connect(self.clear_date_filter)
+        self.date_filter_label = QLabel("")
+        self.date_filter_label.setObjectName("legendLabel")
+        self.date_filter_label.setWordWrap(True)
+        self._active_calendar: QDialog | None = None
+        self._active_calendar_widget: QCalendarWidget | None = None
+
         self.track_color_button = QPushButton("Track Color")
         self.track_color_button.clicked.connect(self.choose_track_color)
         self.update_track_color_button()
@@ -651,6 +722,14 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(field_label("Track opacity"))
         side_layout.addWidget(self.opacity_slider)
         side_layout.addWidget(self.track_names_checkbox)
+        side_layout.addSpacing(12)
+        side_layout.addWidget(field_label("Date range (YYYY-MM-DD)"))
+        side_layout.addWidget(
+            date_field_row(self.start_date_field, self.start_date_button)
+        )
+        side_layout.addWidget(date_field_row(self.end_date_field, self.end_date_button))
+        side_layout.addWidget(self.clear_dates_button)
+        side_layout.addWidget(self.date_filter_label)
         side_layout.addWidget(field_label("Map opacity"))
         side_layout.addWidget(self.map_opacity_slider)
         side_layout.addWidget(self.map_layer_checkbox)
@@ -667,6 +746,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.canvas, 1)
         self.setCentralWidget(root)
         self.setStyleSheet(APP_STYLES)
+        self.apply_date_filter()
         self.save_settings()
 
     @property
@@ -782,6 +862,7 @@ class MainWindow(QMainWindow):
         else:
             self.warning_label.setText("No warnings")
         self.settings.last_track_directory = str(self.report.root)
+        self.update_date_filter_label()
         self.save_settings()
 
     def _apply_load_progress(self, generation: int, result: PreparedLoad) -> None:
@@ -846,6 +927,83 @@ class MainWindow(QMainWindow):
         self.settings.map_layer_enabled = enabled
         self.save_settings()
 
+    def apply_date_filter(self) -> None:
+        start_text = self.start_date_field.text().strip()
+        end_text = self.end_date_field.text().strip()
+        start = parse_date_text(start_text)
+        end = parse_date_text(end_text)
+        invalid = [
+            label
+            for label, text, value in (
+                ("earliest", start_text, start),
+                ("latest", end_text, end),
+            )
+            if text and value is None
+        ]
+        mark_date_field(self.start_date_field, bool(start_text) and start is None)
+        mark_date_field(self.end_date_field, bool(end_text) and end is None)
+        if invalid:
+            self.date_filter_label.setText(
+                f"Ignoring the {' and '.join(invalid)} date: use YYYY-MM-DD."
+            )
+            return
+        if start is not None and end is not None and start > end:
+            self.date_filter_label.setText(
+                "The earliest date is after the latest date; showing no tracks."
+            )
+        self.canvas.set_date_filter(start, end)
+        self.settings.date_filter_start = format_date(start) if start else None
+        self.settings.date_filter_end = format_date(end) if end else None
+        self.save_settings()
+        self.update_date_filter_label()
+
+    def update_date_filter_label(self) -> None:
+        total = self.canvas.total_track_count
+        selected = self.canvas.filtered_track_count
+        if self.canvas.filtered_indexes is None:
+            self.date_filter_label.setText(f"All {total} tracks shown.")
+            return
+        self.date_filter_label.setText(
+            f"{selected} of {total} tracks in range; tracks without a date are hidden."
+        )
+
+    def clear_date_filter(self) -> None:
+        self.start_date_field.clear()
+        self.end_date_field.clear()
+        self.apply_date_filter()
+
+    def pick_start_date(self) -> None:
+        self.open_calendar(self.start_date_field)
+
+    def pick_end_date(self) -> None:
+        self.open_calendar(self.end_date_field)
+
+    def open_calendar(self, field: QLineEdit) -> None:
+        dialog = QDialog(self, Qt.WindowType.Popup)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        calendar = QCalendarWidget(dialog)
+        calendar.setGridVisible(True)
+        selected = parse_date_text(field.text())
+        if selected is not None:
+            calendar.setSelectedDate(QDate(selected.year, selected.month, selected.day))
+        calendar.clicked.connect(
+            lambda chosen: self.accept_calendar_date(field, chosen)
+        )
+        layout.addWidget(calendar)
+        dialog.move(field.mapToGlobal(QPoint(0, field.height())))
+        dialog.show()
+        self._active_calendar = dialog
+        self._active_calendar_widget = calendar
+
+    def accept_calendar_date(self, field: QLineEdit, chosen: QDate) -> None:
+        field.setText(chosen.toString("yyyy-MM-dd"))
+        if self._active_calendar is not None:
+            self._active_calendar.close()
+        self._active_calendar = None
+        self._active_calendar_widget = None
+        self.apply_date_filter()
+
     def save_settings(self) -> None:
         self.settings_store.save(self.settings)
 
@@ -882,6 +1040,31 @@ def rough_land_rects() -> tuple[tuple[float, float, float, float], ...]:
         (35, 5, 150, 72),
         (110, -45, 155, -10),
     )
+
+
+def date_input_row(placeholder: str) -> tuple[QLineEdit, QPushButton]:
+    field = QLineEdit()
+    field.setPlaceholderText(f"{placeholder}: YYYY-MM-DD")
+    field.setClearButtonEnabled(True)
+    button = QPushButton("Pick")
+    button.setObjectName("calendarButton")
+    button.setFixedWidth(56)
+    button.setToolTip(f"Choose the {placeholder.lower()} from a calendar")
+    return field, button
+
+
+def date_field_row(field: QLineEdit, button: QPushButton) -> QWidget:
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    layout.addWidget(field, 1)
+    layout.addWidget(button)
+    return row
+
+
+def mark_date_field(field: QLineEdit, invalid: bool) -> None:
+    field.setStyleSheet("border: 1px solid #ff6b6b;" if invalid else "")
 
 
 def title_label(text: str) -> QLabel:
@@ -977,6 +1160,21 @@ QSlider::handle:horizontal {{
     width: 16px;
     margin: -4px 0;
     border-radius: 8px;
+}}
+QLineEdit {{
+    background: #16203050;
+    border: 1px solid #26364c;
+    border-radius: 6px;
+    color: {TEXT};
+    min-height: 26px;
+    padding: 2px 8px;
+}}
+QPushButton#calendarButton {{
+    background: #26364c;
+    min-height: 28px;
+}}
+QPushButton#calendarButton:hover {{
+    background: #33496a;
 }}
 QCheckBox {{
     color: {TEXT};

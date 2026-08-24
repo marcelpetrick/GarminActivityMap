@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from activity_map.filters import (
+from activity_map.dates import (
     format_date,
     is_valid_date_text,
     parse_date_text,
+)
+from activity_map.filters import (
     track_date_span,
     tracks_in_range,
     undated_track_count,

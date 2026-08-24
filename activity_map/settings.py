@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .dates import is_valid_date_text
+
 CURRENT_SETTINGS_VERSION = 1
 DEFAULT_SETTINGS_PATH = Path.home() / ".config" / "GarminActivityMap" / "settings.json"
 
@@ -20,6 +22,8 @@ class AppSettings:
     show_track_names: bool = False
     map_opacity: int = 82
     map_layer_enabled: bool = True
+    date_filter_start: str | None = None
+    date_filter_end: str | None = None
     preferences: dict[str, Any] = field(default_factory=dict)
 
 
@@ -90,6 +94,8 @@ def settings_from_mapping(payload: dict[str, Any]) -> AppSettings:
             payload.get("map_layer_enabled"),
             defaults.map_layer_enabled,
         ),
+        date_filter_start=date_string(payload.get("date_filter_start")),
+        date_filter_end=date_string(payload.get("date_filter_end")),
         preferences=dictionary(payload.get("preferences")),
     )
 
@@ -109,6 +115,12 @@ def color_string(value: Any, default: str) -> str:
     except ValueError:
         return default
     return normalized
+
+
+def date_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value if is_valid_date_text(value) and value.strip() else None
 
 
 def percentage(value: Any, default: int) -> int:

@@ -53,6 +53,8 @@ flowchart LR
   geo[activity_map.geo]
   render[activity_map.render]
   loading[activity_map.loading]
+  dates[activity_map.dates]
+  filters[activity_map.filters]
   lod[activity_map.lod]
   spatial[activity_map.spatial]
   qt_render[activity_map.qt_render]
@@ -71,6 +73,10 @@ flowchart LR
   widgets --> geo
   widgets --> render
   widgets --> lod
+  widgets --> dates
+  widgets --> filters
+  filters --> render
+  settings --> dates
   widgets --> spatial
   widgets --> qt_render
   widgets --> tiles
@@ -86,6 +92,8 @@ flowchart LR
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
 - `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
 - `activity_map.loading` coordinates background loading and immutable prepared snapshots without blocking the GUI thread.
+- `activity_map.dates` parses and formats the single `YYYY-MM-DD` date vocabulary shared by the UI and the settings store.
+- `activity_map.filters` reports the date span of a prepared set and selects the tracks inside an inclusive, optionally open-ended range.
 - `activity_map.lod` selects screen-space detail under an explicit visible-point budget.
 - `activity_map.spatial` indexes projected track bounds, extends that index in place as new batches arrive, and returns only viewport-intersecting tracks.
 - `activity_map.qt_render` lazily retains requested Qt path levels and provides world transforms for batched drawing and cached backdrop geometry.
