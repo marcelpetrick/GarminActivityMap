@@ -993,15 +993,17 @@ class MainWindow(QMainWindow):
                 f"Ignoring the {' and '.join(invalid)} date: use YYYY-MM-DD."
             )
             return
-        if start is not None and end is not None and start > end:
-            self.date_filter_label.setText(
-                "The earliest date is after the latest date; showing no tracks."
-            )
         self.canvas.set_date_filter(start, end)
-        self.settings.date_filter_start = format_date(start) if start else None
-        self.settings.date_filter_end = format_date(end) if end else None
+        self.settings.date_filter_start = (
+            format_date(start) if start is not None else None
+        )
+        self.settings.date_filter_end = format_date(end) if end is not None else None
         self.save_settings()
         self.update_date_filter_label()
+        if start is not None and end is not None and start > end:
+            self.date_filter_label.setText(
+                "The earliest date is after the latest date, so no track matches."
+            )
 
     def update_date_filter_label(self) -> None:
         total = self.canvas.total_track_count

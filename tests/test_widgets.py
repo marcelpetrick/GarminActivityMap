@@ -778,6 +778,7 @@ def test_inverted_range_reports_that_nothing_matches(qtbot: QtBot) -> None:
     window.apply_date_filter()
 
     assert window.canvas.filtered_track_count == 0
+    assert "earliest date is after the latest date" in window.date_filter_label.text()
 
 
 def test_calendar_picker_writes_a_date_into_the_field(qtbot: QtBot) -> None:
