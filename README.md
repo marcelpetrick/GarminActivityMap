@@ -36,8 +36,56 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.77`
+- Version: `0.0.78`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
+
+## Project Size
+
+<!-- project-metrics:start -->
+
+Measured for version `0.0.78` with `python scripts/project_metrics.py`.
+
+| Area | Files | Lines | Code lines | Classes | Functions |
+|---|---:|---:|---:|---:|---:|
+| Application (activity_map) | 18 | 3,731 | 3,218 | 29 | 241 |
+| Exporter (garmin_export) | 4 | 1,127 | 988 | 7 | 52 |
+| Tests | 20 | 4,012 | 3,250 | 9 | 221 |
+| Benchmarks | 2 | 451 | 392 | 1 | 17 |
+| Tooling scripts | 3 | 419 | 357 | 1 | 23 |
+| **Total** | **47** | **9,740** | **8,205** | **47** | **554** |
+
+| Property | Value |
+|---|---|
+| Test functions | 161 |
+| Test cases collected by pytest | 165 |
+| Coverage threshold | 95% enforced by the pipeline |
+| Quality gates | 12 in `localPipeline.sh` |
+| Runtime dependencies | 5, all pinned exactly |
+| Development dependencies | 9, all pinned exactly |
+| Complexity ceiling | no function above radon grade C |
+| Python | 3.14 |
+| License | GPL-3.0-or-later |
+
+Largest modules:
+
+| Module | Lines |
+|---|---:|
+| `activity_map/widgets.py` | 1,289 |
+| `garmin_export/cli.py` | 845 |
+| `activity_map/loader.py` | 540 |
+| `activity_map/prepared_cache.py` | 413 |
+| `activity_map/render.py` | 310 |
+
+<!-- project-metrics:end -->
+
+Regenerate the table above after changing the code:
+
+```bash
+python scripts/project_metrics.py --write
+```
+
+Run it without `--write` to print the same report, or add `--no-collect` to skip
+the pytest collection count when Qt cannot be imported.
 
 ## Usage Terms
 
