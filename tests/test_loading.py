@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -163,3 +164,27 @@ def test_missing_directory_report_is_not_cached(tmp_path: Path) -> None:
 
     assert missing.report.warnings
     assert available.report.warnings == ()
+
+
+def test_prepared_cache_round_trips_activity_start_dates(tmp_path: Path) -> None:
+    dataset = tmp_path / "dated"
+    dataset.mkdir()
+    (dataset / "one.json").write_text(
+        json.dumps(
+            {
+                "activityId": 7,
+                "polyline": [
+                    {"lat": 52.0, "lon": 13.0, "time": "2026-06-02T06:00:00Z"},
+                    {"lat": 52.001, "lon": 13.001, "time": "2026-06-02T06:01:00Z"},
+                    {"lat": 52.002, "lon": 13.002, "time": "2026-06-02T06:02:00Z"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    prepared = load_and_prepare_directory(dataset)
+    cached = load_and_prepare_directory(dataset)
+
+    assert prepared.render_tracks[0].start_date == date(2026, 6, 2)
+    assert cached.render_tracks == prepared.render_tracks

@@ -52,6 +52,13 @@ class ActivityTrack:
     duration_seconds: float | None = None
     bounds: TrackBounds | None = None
 
+    @property
+    def start_timestamp(self) -> datetime | None:
+        for point in self.points:
+            if point.timestamp is not None:
+                return point.timestamp
+        return None
+
 
 @dataclass(frozen=True, slots=True)
 class LoadWarning:

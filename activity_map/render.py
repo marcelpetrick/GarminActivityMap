@@ -4,6 +4,7 @@ import math
 import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from datetime import date
 
 from .geo import ProjectedPoint, haversine_distance_meters, project_point
 from .models import ActivityTrack, TrackPoint
@@ -42,6 +43,7 @@ class RenderTrack:
     label_anchor: ProjectedPoint | None
     bounds: ProjectedBounds
     levels: tuple[RenderLevel, ...]
+    start_date: date | None = None
 
 
 MAX_CONTINUOUS_SEGMENT_METERS = 5_000.0
@@ -137,7 +139,13 @@ def prepare_track(
         label_anchor=label_anchor,
         bounds=bounds,
         levels=levels,
+        start_date=activity_start_date(track),
     )
+
+
+def activity_start_date(track: ActivityTrack) -> date | None:
+    timestamp = track.start_timestamp
+    return None if timestamp is None else timestamp.date()
 
 
 def geometry_for_zoom(track: RenderTrack, zoom: float) -> RenderGeometry:

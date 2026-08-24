@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +28,7 @@ from .render import (
     RenderTrack,
 )
 
-CACHE_SCHEMA_VERSION = 1
+CACHE_SCHEMA_VERSION = 2
 CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_PREPARED_CACHE_DIR"
 CACHE_DISABLED_ENVIRONMENT = "ACTIVITY_MAP_DISABLE_PREPARED_CACHE"
 
@@ -284,6 +284,9 @@ def encode_render_track(track: RenderTrack) -> dict[str, Any]:
             if track.label_anchor is not None
             else None
         ),
+        "start": (
+            track.start_date.isoformat() if track.start_date is not None else None
+        ),
         "bounds": [
             track.bounds.min_x,
             track.bounds.max_x,
@@ -340,7 +343,12 @@ def decode_render_track(value: dict[str, Any]) -> RenderTrack:
             max_y=float(bounds[3]),
         ),
         levels=levels,
+        start_date=decode_start_date(value["start"]),
     )
+
+
+def decode_start_date(value: Any) -> date | None:
+    return None if value is None else date.fromisoformat(str(value))
 
 
 def decode_projected_segments(
