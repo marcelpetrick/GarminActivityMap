@@ -36,7 +36,7 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.76`
+- Version: `0.0.77`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Usage Terms
@@ -214,6 +214,7 @@ Controls:
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
 - While a directory is still loading, the map keeps fitting each newly arriving batch of tracks until you pan or zoom. After that the view stays where you put it, and Reset View or a double-click hands control back to automatic fitting.
+- Replay over time: animate the loaded archive chronologically. The map starts empty and tracks appear in recording order, with the whole date span compressed into ten seconds regardless of how long it covers. The label reports the date currently reached and the progress. Press the button again to stop early; when the replay finishes, or is stopped, the normal view returns. A replay respects an active date range and animates only that period, and it ends by showing everything again so it can simply be started once more.
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 
 The app persists the last loaded directory, last run timestamp, track color,

@@ -55,6 +55,7 @@ flowchart LR
   loading[activity_map.loading]
   dates[activity_map.dates]
   filters[activity_map.filters]
+  replay[activity_map.replay]
   lod[activity_map.lod]
   spatial[activity_map.spatial]
   qt_render[activity_map.qt_render]
@@ -75,6 +76,8 @@ flowchart LR
   widgets --> lod
   widgets --> dates
   widgets --> filters
+  widgets --> replay
+  replay --> render
   filters --> render
   settings --> dates
   widgets --> spatial
@@ -94,6 +97,7 @@ flowchart LR
 - `activity_map.loading` coordinates background loading and immutable prepared snapshots without blocking the GUI thread.
 - `activity_map.dates` parses and formats the single `YYYY-MM-DD` date vocabulary shared by the UI and the settings store.
 - `activity_map.filters` reports the date span of a prepared set and selects the tracks inside an inclusive, optionally open-ended range.
+- `activity_map.replay` maps replay progress onto a date span and reports which tracks have been reached, so the animation itself is pure and testable.
 - `activity_map.lod` selects screen-space detail under an explicit visible-point budget.
 - `activity_map.spatial` indexes projected track bounds, extends that index in place as new batches arrive, and returns only viewport-intersecting tracks.
 - `activity_map.qt_render` lazily retains requested Qt path levels and provides world transforms for batched drawing and cached backdrop geometry.

@@ -21,6 +21,10 @@ from activity_map.models import (
     TrackPoint,
 )
 from activity_map.render import ProjectedBounds, prepare_tracks
+from activity_map.replay import (
+    REPLAY_DURATION_MILLISECONDS,
+    REPLAY_TICK_MILLISECONDS,
+)
 from activity_map.settings import SettingsStore
 from activity_map.spatial import TrackSpatialIndex
 from activity_map.tiles import TileCoordinate
@@ -809,3 +813,103 @@ def test_persisted_date_filter_is_restored_on_the_next_start(
 
     assert second.start_date_field.text() == "2026-06-09"
     assert second.canvas.date_filter_start == date(2026, 6, 9)
+
+
+def test_replay_reveals_tracks_chronologically(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+    window.canvas.resize(400, 300)
+
+    window.start_replay()
+    assert window.replay_timer.isActive()
+    assert window.replay_button.text() == "Stop replay"
+    assert window.canvas.replay_active
+    assert window.canvas.replay_cutoff is None
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 0
+    assert "0%" in window.replay_label.text()
+
+    window.apply_replay_progress(0.5)
+    assert window.canvas.replay_cutoff == date(2026, 6, 10)
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 2
+    assert "2026-06-10" in window.replay_label.text()
+
+    window.apply_replay_progress(1.0)
+    assert window.canvas.replay_cutoff == date(2026, 6, 20)
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 3
+
+    window.stop_replay()
+    assert not window.replay_timer.isActive()
+    assert not window.canvas.replay_active
+    assert window.replay_button.text() == "Replay over time"
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 4
+
+
+def test_replay_ticks_finish_after_the_configured_duration(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+    window.start_replay()
+    ticks = REPLAY_DURATION_MILLISECONDS // REPLAY_TICK_MILLISECONDS
+
+    for _ in range(ticks - 1):
+        window.advance_replay()
+    assert window.replay_timer.isActive()
+    assert window.canvas.replay_active
+
+    window.advance_replay()
+
+    assert not window.replay_timer.isActive()
+    assert not window.canvas.replay_active
+
+
+def test_replay_toggles_and_respects_an_active_date_filter(qtbot: QtBot) -> None:
+    window = dated_window(qtbot)
+    window.canvas.resize(400, 300)
+    window.start_date_field.setText("2026-06-09")
+    window.apply_date_filter()
+
+    window.toggle_replay()
+    window.apply_replay_progress(0.5)
+    window.canvas.render_to_pixmap()
+
+    assert window.canvas.visible_track_count == 1
+    assert "2026-06-09" in window.replay_label.text()
+
+    window.toggle_replay()
+    assert not window.replay_timer.isActive()
+    window.canvas.render_to_pixmap()
+    assert window.canvas.visible_track_count == 2
+
+
+def test_replay_without_dated_tracks_reports_and_does_not_start(qtbot: QtBot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    undated = (dated_activity("undated", None),)
+    window.canvas.set_prepared_tracks(undated, prepare_tracks(undated))
+
+    window.start_replay()
+
+    assert not window.replay_timer.isActive()
+    assert not window.canvas.replay_active
+    assert window.replay_label.text() == "No dated tracks to replay."
+
+
+def test_loading_a_directory_stops_a_running_replay(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = dated_window(qtbot)
+    window.start_replay()
+    report = LoadReport(tmp_path, 0, (), ())
+    monkeypatch.setattr(
+        widgets,
+        "load_and_prepare_directory",
+        lambda *_args, **_kwargs: PreparedLoad(report, ()),
+    )
+
+    window.load_path(tmp_path)
+
+    assert not window.replay_timer.isActive()
+    assert not window.canvas.replay_active

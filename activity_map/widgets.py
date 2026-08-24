@@ -49,7 +49,7 @@ from PyQt6.QtWidgets import (
 
 from . import __version__
 from .dates import format_date, parse_date_text
-from .filters import tracks_in_range
+from .filters import track_date_span, tracks_in_range
 from .geo import (
     ScreenPoint,
     Viewport,
@@ -77,6 +77,12 @@ from .render import (
     geometry_for_zoom,
     prepare_tracks,
     track_label_anchor,
+)
+from .replay import (
+    REPLAY_DURATION_MILLISECONDS,
+    REPLAY_TICK_MILLISECONDS,
+    revealed_cutoff,
+    tracks_until,
 )
 from .settings import SettingsStore
 from .spatial import TrackSpatialIndex, viewport_bounds
@@ -129,6 +135,9 @@ class MapCanvas(QWidget):
         self.date_filter_start: date | None = None
         self.date_filter_end: date | None = None
         self.filtered_indexes: frozenset[int] | None = None
+        self.replay_active = False
+        self.replay_cutoff: date | None = None
+        self.replay_indexes: frozenset[int] = frozenset()
         self.track_color = QColor(TRACK)
         self.track_opacity = 0.72
         self.track_names_visible = False
@@ -184,6 +193,7 @@ class MapCanvas(QWidget):
         self.retained_track_paths = prepare_retained_paths(self.render_tracks)
         self.spatial_index = TrackSpatialIndex.build(self.render_tracks)
         self.refresh_date_filter()
+        self.clear_replay()
         self.reset_view()
 
     def append_prepared_tracks(
@@ -217,6 +227,22 @@ class MapCanvas(QWidget):
             self.date_filter_end,
         )
 
+    def set_replay_cutoff(self, cutoff: date | None) -> None:
+        self.replay_active = True
+        self.replay_cutoff = cutoff
+        self.replay_indexes = tracks_until(
+            self.render_tracks,
+            cutoff,
+            self.filtered_indexes,
+        )
+        self.finish_gesture()
+
+    def clear_replay(self) -> None:
+        self.replay_active = False
+        self.replay_cutoff = None
+        self.replay_indexes = frozenset()
+        self.update()
+
     def filtered_render_tracks(self) -> tuple[RenderTrack, ...]:
         if self.filtered_indexes is None:
             return self.render_tracks
@@ -225,6 +251,10 @@ class MapCanvas(QWidget):
         )
 
     def selected_indexes(self, visible_indexes: tuple[int, ...]) -> tuple[int, ...]:
+        if self.replay_active:
+            return tuple(
+                index for index in visible_indexes if index in self.replay_indexes
+            )
         if self.filtered_indexes is None:
             return visible_indexes
         return tuple(
@@ -675,6 +705,17 @@ class MainWindow(QMainWindow):
         self.end_date_field.editingFinished.connect(self.apply_date_filter)
         self.start_date_button.clicked.connect(self.pick_start_date)
         self.end_date_button.clicked.connect(self.pick_end_date)
+        self.replay_button = QPushButton("Replay over time")
+        self.replay_button.clicked.connect(self.toggle_replay)
+        self.replay_label = QLabel("")
+        self.replay_label.setObjectName("legendLabel")
+        self.replay_label.setWordWrap(True)
+        self.replay_timer = QTimer(self)
+        self.replay_timer.setInterval(REPLAY_TICK_MILLISECONDS)
+        self.replay_timer.timeout.connect(self.advance_replay)
+        self._replay_span: tuple[date, date] | None = None
+        self._replay_elapsed_milliseconds = 0
+
         self.clear_dates_button = QPushButton("Show all dates")
         self.clear_dates_button.clicked.connect(self.clear_date_filter)
         self.date_filter_label = QLabel("")
@@ -730,6 +771,10 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(date_field_row(self.end_date_field, self.end_date_button))
         side_layout.addWidget(self.clear_dates_button)
         side_layout.addWidget(self.date_filter_label)
+        side_layout.addSpacing(12)
+        side_layout.addWidget(field_label("Replay"))
+        side_layout.addWidget(self.replay_button)
+        side_layout.addWidget(self.replay_label)
         side_layout.addWidget(field_label("Map opacity"))
         side_layout.addWidget(self.map_opacity_slider)
         side_layout.addWidget(self.map_layer_checkbox)
@@ -803,6 +848,7 @@ class MainWindow(QMainWindow):
         generation = self._load_generation
         self._active_load_path = resolved_path
         self.report = None
+        self.stop_replay()
         self.status_label.setText(f"Loading {path}...")
         self.warning_label.setText("")
         future = self.load_executor.submit(
@@ -1004,10 +1050,50 @@ class MainWindow(QMainWindow):
         self._active_calendar_widget = None
         self.apply_date_filter()
 
+    def toggle_replay(self) -> None:
+        if self.replay_timer.isActive():
+            self.stop_replay()
+        else:
+            self.start_replay()
+
+    def start_replay(self) -> None:
+        span = track_date_span(self.canvas.filtered_render_tracks())
+        if span is None:
+            self.replay_label.setText("No dated tracks to replay.")
+            return
+        self._replay_span = span
+        self._replay_elapsed_milliseconds = 0
+        self.replay_button.setText("Stop replay")
+        self.apply_replay_progress(0.0)
+        self.replay_timer.start()
+
+    def advance_replay(self) -> None:
+        self._replay_elapsed_milliseconds += REPLAY_TICK_MILLISECONDS
+        progress = self._replay_elapsed_milliseconds / REPLAY_DURATION_MILLISECONDS
+        self.apply_replay_progress(min(progress, 1.0))
+        if progress >= 1.0:
+            self.stop_replay()
+
+    def apply_replay_progress(self, progress: float) -> None:
+        if self._replay_span is None:
+            return
+        start, end = self._replay_span
+        cutoff = revealed_cutoff(start, end, progress)
+        self.canvas.set_replay_cutoff(cutoff)
+        self.replay_label.setText(replay_status(start, end, cutoff, progress))
+
+    def stop_replay(self) -> None:
+        self.replay_timer.stop()
+        self._replay_span = None
+        self._replay_elapsed_milliseconds = 0
+        self.replay_button.setText("Replay over time")
+        self.canvas.clear_replay()
+
     def save_settings(self) -> None:
         self.settings_store.save(self.settings)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
+        self.replay_timer.stop()
         self._load_generation += 1
         self.load_executor.shutdown(wait=False, cancel_futures=True)
         self.canvas.shutdown_tiles()
@@ -1039,6 +1125,21 @@ def rough_land_rects() -> tuple[tuple[float, float, float, float], ...]:
         (-20, -35, 52, 35),
         (35, 5, 150, 72),
         (110, -45, 155, -10),
+    )
+
+
+def replay_status(
+    start: date,
+    end: date,
+    cutoff: date | None,
+    progress: float,
+) -> str:
+    percentage = int(min(max(progress, 0.0), 1.0) * 100)
+    if cutoff is None:
+        return f"Replaying {format_date(start)} to {format_date(end)}: 0%"
+    return (
+        f"Replaying {format_date(start)} to {format_date(end)}: "
+        f"{format_date(cutoff)} ({percentage}%)"
     )
 
 
