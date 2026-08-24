@@ -38,6 +38,9 @@
 - Every commit must pass `./localPipeline.sh`.
 - Keep `.github/workflows/local-pipeline.yml` running the same script, so the
   GitHub Actions badge and the local gate cannot drift apart.
+- Every commit bumps the patch version, and pushing to `master` publishes that
+  version as a tagged GitHub Release, so `VERSION`, `pyproject.toml`, and
+  `activity_map.__version__` must always agree.
 - Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and render preparation.
 - Add GUI smoke tests where practical without requiring private Garmin data.
 - Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.

@@ -170,6 +170,17 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Keep map tiles in the platform cache directory, write them atomically, and
      pace downloads to respect the OpenStreetMap usage policy.
 
+21. Date filtering and replay [done]
+   - Record an activity start date on prepared tracks and persist it in the cache.
+   - Filter the map by an inclusive, optionally open-ended date range entered as
+     text in `YYYY-MM-DD` or picked from a calendar.
+   - Replay the archive chronologically, mapping the whole span onto ten seconds.
+
+22. Release automation and project reporting [done]
+   - Publish every version from GitHub Actions with a git tag, release notes,
+     and verified artifacts, gated by the full local pipeline.
+   - Report the size and shape of the project in the README from a script.
+
 ## Done Criteria
 
 - `./localPipeline.sh` passes from a clean local environment.

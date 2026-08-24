@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Verify, tag and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      ACTIVITY_MAP_DISABLE_TILES: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxkbcommon-x11-0
+
+      - name: Resolve and verify the release version
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'VERSION file does not contain a SemVer value: %s\n' "${VERSION}" >&2
+            exit 1
+          fi
+          PACKAGE_VERSION="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          MODULE_VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' activity_map/__init__.py)"
+          if [[ "${VERSION}" != "${PACKAGE_VERSION}" || "${VERSION}" != "${MODULE_VERSION}" ]]; then
+            printf 'Version mismatch: VERSION=%s pyproject=%s module=%s\n' \
+              "${VERSION}" "${PACKAGE_VERSION}" "${MODULE_VERSION}" >&2
+            exit 1
+          fi
+          printf 'VERSION=%s\n' "${VERSION}" >> "${GITHUB_ENV}"
+          printf 'TAG=v%s\n' "${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Skip versions that were already released
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            printf 'Tag %s already exists; bump VERSION to publish a new release.\n' "${TAG}"
+            printf 'ALREADY_RELEASED=true\n' >> "${GITHUB_ENV}"
+          else
+            printf 'ALREADY_RELEASED=false\n' >> "${GITHUB_ENV}"
+          fi
+
+      - name: Run the local pipeline
+        if: env.ALREADY_RELEASED == 'false'
+        run: ./localPipeline.sh
+
+      - name: Assemble release assets
+        if: env.ALREADY_RELEASED == 'false'
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp dist/*.whl dist/*.tar.gz release-assets/
+          (cd build && zip -qr "${GITHUB_WORKSPACE}/release-assets/garmin-activity-map-${VERSION}-docs.zip" docs)
+          python scripts/project_metrics.py --no-collect \
+            > "release-assets/garmin-activity-map-${VERSION}-metrics.md"
+          (cd release-assets && sha256sum ./*.whl ./*.tar.gz ./*.zip ./*.md > SHA256SUMS)
+          ls -l release-assets
+
+      - name: Write release notes
+        if: env.ALREADY_RELEASED == 'false'
+        run: |
+          set -euo pipefail
+          BUILT_AT="$(date --utc +'%Y-%m-%dT%H:%M:%SZ')"
+          {
+            printf '## Garmin Activity Map %s\n\n' "${TAG}"
+            printf '| Field | Value |\n|---|---|\n'
+            printf '| Version | `%s` |\n' "${VERSION}"
+            printf '| Commit | `%s` |\n' "${GITHUB_SHA}"
+            printf '| Built at | %s |\n' "${BUILT_AT}"
+            printf '| Python | 3.14 |\n'
+            printf '| Workflow run | [%s](%s/%s/actions/runs/%s) |\n' \
+              "${GITHUB_RUN_ID}" "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
+            printf '| License | GPL-3.0-or-later |\n\n'
+            printf 'Published only after `./localPipeline.sh` passed every gate on this commit: formatting, lint, strict typing, dead code, complexity, dependency and architecture checks, documentation build, package build, tests, coverage, the load-to-first-display budget, and the CLI/GUI smoke runs.\n\n'
+            printf '### Changes in this release\n\n'
+            git log -1 --pretty=format:'%s%n%n%b' "${GITHUB_SHA}"
+            printf '\n\n### Assets\n\n'
+            printf '| Asset | Contents |\n|---|---|\n'
+            printf '| `garmin_visualize_all_activities-%s-py3-none-any.whl` | Installable wheel |\n' "${VERSION}"
+            printf '| `garmin_visualize_all_activities-%s.tar.gz` | Source distribution |\n' "${VERSION}"
+            printf '| `garmin-activity-map-%s-docs.zip` | Generated documentation bundle |\n' "${VERSION}"
+            printf '| `garmin-activity-map-%s-metrics.md` | Project size report for this commit |\n' "${VERSION}"
+            printf '| `SHA256SUMS` | Checksums for every asset |\n'
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create the annotated tag
+        if: env.ALREADY_RELEASED == 'false'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Garmin Activity Map ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Publish the GitHub release
+        if: env.ALREADY_RELEASED == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" release-assets/* \
+            --target "${GITHUB_SHA}" \
+            --title "Garmin Activity Map ${TAG}" \
+            --notes-file release-notes.md
+
+      - name: Upload release assets as a workflow artifact
+        if: env.ALREADY_RELEASED == 'false'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-assets
+          path: release-assets/*
+          if-no-files-found: error

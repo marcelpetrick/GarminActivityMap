@@ -1,6 +1,7 @@
 # Garmin Activity Map
 
 [![Local Pipeline](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/local-pipeline.yml)
+[![Release](https://github.com/marcelpetrick/GarminActivityMap/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/marcelpetrick/GarminActivityMap/releases)
 [![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)](localPipeline.sh)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
@@ -36,14 +37,14 @@ python -m activity_map data/garmin
 
 **License: GPLv3 or later. See `LICENSE`.**
 
-- Version: `0.0.78`
+- Version: `0.0.79`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.78` with `python scripts/project_metrics.py`.
+Measured for version `0.0.79` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
