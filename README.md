@@ -33,9 +33,9 @@ python -m activity_map data/garmin
 
 **Author: Marcel Petrick <mail@marcelpetrick.it>**
 
-**Note: projected is generated with AI.**
-
 **License: GPLv3 or later. See `LICENSE`.**
+
+**Note: project is generated with AI.**
 
 - Version: `0.0.80`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
