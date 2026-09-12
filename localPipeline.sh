@@ -60,7 +60,7 @@ virtualenv_step() {
 
 dependencies() {
   activate_venv || return 1
-  python -m pip install --upgrade pip || return 1
+  python -m pip install --upgrade pip==26.2.1 || return 1
   python -m pip install -r requirements.txt || return 1
   python -m pip install -e ".[dev]" || return 1
   STEP_DETAIL="Editable install with dev dependencies completed"
