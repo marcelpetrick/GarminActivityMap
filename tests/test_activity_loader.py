@@ -120,6 +120,24 @@ def test_extract_track_points_falls_back_to_coordinate_dicts() -> None:
     ]
 
 
+def test_fallback_coordinates_keep_start_and_end_pairs_together() -> None:
+    points = extract_track_points(
+        {
+            "summary": {
+                "startLatitude": 52.0,
+                "startLongitude": 13.0,
+                "endLatitude": 53.0,
+                "endLongitude": 14.0,
+            }
+        }
+    )
+
+    assert points == [
+        TrackPoint(latitude=52.0, longitude=13.0),
+        TrackPoint(latitude=53.0, longitude=14.0),
+    ]
+
+
 def test_extract_track_points_converts_semicircle_coordinates() -> None:
     points = extract_track_points(
         {

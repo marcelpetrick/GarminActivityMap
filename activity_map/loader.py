@@ -18,27 +18,15 @@ from .models import (
     TrackSegment,
 )
 
-LATITUDE_KEYS = frozenset(
-    {
-        "lat",
-        "latitude",
-        "positionLat",
-        "positionLatitude",
-        "startLatitude",
-        "endLatitude",
-    }
-)
-LONGITUDE_KEYS = frozenset(
-    {
-        "lon",
-        "lng",
-        "longitude",
-        "positionLong",
-        "positionLon",
-        "positionLongitude",
-        "startLongitude",
-        "endLongitude",
-    }
+COORDINATE_KEY_PAIRS = (
+    ("lat", "lon"),
+    ("lat", "lng"),
+    ("latitude", "longitude"),
+    ("positionLat", "positionLong"),
+    ("positionLat", "positionLon"),
+    ("positionLatitude", "positionLongitude"),
+    ("startLatitude", "startLongitude"),
+    ("endLatitude", "endLongitude"),
 )
 LATITUDE_METRIC_KEYS = frozenset({"directLatitude", "enhancedLatitude", "latitude"})
 LONGITUDE_METRIC_KEYS = frozenset({"directLongitude", "enhancedLongitude", "longitude"})
@@ -296,9 +284,7 @@ def select_track_source(
 def extract_coordinate_dicts(payload: Mapping[str, Any]) -> list[TrackPoint]:
     points: list[TrackPoint] = []
     for item in walk_mappings(payload):
-        point = parse_coordinate_mapping(item)
-        if point is not None:
-            points.append(point)
+        points.extend(parse_coordinate_mappings(item))
     return points
 
 
@@ -313,7 +299,7 @@ def parse_point_sequence(values: Sequence[Any]) -> Iterator[TrackPoint | None]:
         ):
             yield make_point(item["lat"], item["lon"])
         elif isinstance(item, Mapping):
-            yield parse_coordinate_mapping(item)
+            yield from parse_coordinate_mappings(item)
         elif (
             isinstance(item, Sequence)
             and not isinstance(item, str | bytes)
@@ -350,17 +336,23 @@ def parse_metric_row(
     return [] if point is None else [point]
 
 
-def parse_coordinate_mapping(item: Mapping[str, Any]) -> TrackPoint | None:
-    latitude = first_value_for_keys(item, LATITUDE_KEYS)
-    longitude = first_value_for_keys(item, LONGITUDE_KEYS)
-    if latitude is None or longitude is None:
-        return None
-    return make_point(
-        latitude,
-        longitude,
-        first_value_for_keys(item, TIMESTAMP_KEYS),
-        first_value_for_keys(item, ALTITUDE_KEYS),
-    )
+def parse_coordinate_mappings(item: Mapping[str, Any]) -> list[TrackPoint]:
+    timestamp = first_value_for_keys(item, TIMESTAMP_KEYS)
+    altitude = first_value_for_keys(item, ALTITUDE_KEYS)
+    points: list[TrackPoint] = []
+    for latitude_key, longitude_key in COORDINATE_KEY_PAIRS:
+        if latitude_key not in item or longitude_key not in item:
+            continue
+        is_endpoint = latitude_key.startswith(("start", "end"))
+        point = make_point(
+            item[latitude_key],
+            item[longitude_key],
+            None if is_endpoint else timestamp,
+            None if is_endpoint else altitude,
+        )
+        if point is not None:
+            points.append(point)
+    return deduplicate_adjacent(points)
 
 
 def make_point(
