@@ -51,7 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     for line in describe_year_range_results(results):
         print(line)
-    return 0
+    return 1 if any(result.failed_count for result in results) else 0
 
 
 def describe_year_range_results(results: list[ExportResult]) -> tuple[str, ...]:

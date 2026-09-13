@@ -12,10 +12,11 @@ from typing import Any
 import pytest
 from pytest import CaptureFixture, MonkeyPatch
 
-from garmin_export import cli
+from garmin_export import cli, year_range
 from garmin_export.cli import (
     ExportConfig,
     ExportProgress,
+    ExportResult,
     RequestExecutor,
     activity_start_date,
     build_client,
@@ -518,6 +519,51 @@ def test_main_exports_with_built_client(
     assert exit_code == 0
     assert "Exported 3 activities" in output
     assert (tmp_path / "manifest.json").exists()
+
+
+def failed_export_result(tmp_path: Path) -> ExportResult:
+    return ExportResult(
+        output_dir=str(tmp_path),
+        exported_at="2026-01-01T00:00:00+00:00",
+        activity_count=2,
+        include_details=True,
+        activity_type=None,
+        start_date=None,
+        end_date=None,
+        files=["activities/1.json", "activities/2.json"],
+        skipped_existing_count=0,
+        failed_count=1,
+        retry_count=0,
+        downloaded_count=2,
+    )
+
+
+def test_main_returns_failure_when_an_activity_could_not_be_exported(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    client = FakeClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(
+        cli, "export_activities", lambda client, config: failed_export_result(tmp_path)
+    )
+
+    assert main(["--output-dir", str(tmp_path)]) == 1
+
+
+def test_year_range_main_returns_failure_when_any_year_is_incomplete(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    client = FakeClient()
+    monkeypatch.setattr(year_range, "build_client", lambda: client)
+    monkeypatch.setattr(
+        year_range,
+        "export_year_range",
+        lambda client, config: [failed_export_result(tmp_path)],
+    )
+
+    assert (
+        year_range.main(["--output-root", str(tmp_path), "--start-year", "2025"]) == 1
+    )
 
 
 def test_export_verbose_logs_progress(

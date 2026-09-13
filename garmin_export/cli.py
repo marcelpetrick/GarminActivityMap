@@ -175,7 +175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"Exported {result.activity_count} activities to {result.output_dir}; "
         f"manifest: {config.output_dir / 'manifest.json'}"
     )
-    return 0
+    return 1 if result.failed_count else 0
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

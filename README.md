@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.83` with `python scripts/project_metrics.py`.
+Measured for version `0.0.84` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
 | Application (activity_map) | 18 | 3,771 | 3,254 | 29 | 243 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,067 | 3,301 | 9 | 222 |
+| Tests | 20 | 4,111 | 3,337 | 9 | 225 |
 | Benchmarks | 2 | 451 | 392 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **9,827** | **8,286** | **47** | **556** |
+| **Total** | **47** | **9,871** | **8,322** | **47** | **559** |
 
 | Property | Value |
 |---|---|
-| Test functions | 162 |
-| Test cases collected by pytest | 167 |
+| Test functions | 164 |
+| Test cases collected by pytest | 169 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -164,6 +164,8 @@ A detailed run also completes activities that were previously exported with
 those payloads are fetched. Switching from a summary-only export to a full
 export therefore fills the missing detail data instead of leaving those
 activities incomplete forever. A summary-only run leaves such files untouched.
+Both exporter commands return a nonzero exit status when any activity remains
+failed, making incomplete archives visible to shell scripts and CI jobs.
 
 For a cautious 2026 export:
 
