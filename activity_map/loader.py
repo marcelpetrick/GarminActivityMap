@@ -56,20 +56,26 @@ ALTITUDE_KEYS = ("altitude", "elevation", "altitudeMeters", "enhancedAltitude")
 ALTITUDE_METRIC_KEYS = frozenset(
     {"directElevation", "enhancedElevation", "altitude", "elevation"}
 )
-DEFAULT_MAX_SEGMENT_SPEED_KMH = 30.0
+DEFAULT_MAX_SEGMENT_SPEED_KMH = 300.0
+ACTIVITY_SPEED_LIMITS_KMH = (
+    (("swimming",), 25.0),
+    (("running", "walking", "hiking"), 50.0),
+    (("cycling", "biking"), 160.0),
+    (("skiing", "snowboarding"), 200.0),
+)
 DEFAULT_PROGRESS_BATCH_SIZE = 50
 
 
 def load_directory(
     root: Path,
-    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    max_speed_kmh: float | None = None,
 ) -> LoadReport:
     return load_directory_with_workers(root, max_speed_kmh, workers=1)
 
 
 def load_directory_parallel(
     root: Path,
-    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    max_speed_kmh: float | None = None,
     workers: int = 4,
     progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
     progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
@@ -85,7 +91,7 @@ def load_directory_parallel(
 
 def load_directory_with_workers(
     root: Path,
-    max_speed_kmh: float,
+    max_speed_kmh: float | None,
     workers: int,
     progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
     progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
@@ -173,14 +179,14 @@ def consume_load_results(
 
 
 def load_activity_result_from_work(
-    work: tuple[Path, float],
+    work: tuple[Path, float | None],
 ) -> tuple[ActivityTrack | None, LoadWarning | None]:
     return load_activity_result(*work)
 
 
 def load_activity_result(
     file_path: Path,
-    max_speed_kmh: float,
+    max_speed_kmh: float | None,
 ) -> tuple[ActivityTrack | None, LoadWarning | None]:
     try:
         track = load_activity_file(file_path, max_speed_kmh=max_speed_kmh)
@@ -193,7 +199,7 @@ def load_activity_result(
 
 def load_activity_file(
     file_path: Path,
-    max_speed_kmh: float = DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    max_speed_kmh: float | None = None,
 ) -> ActivityTrack | None:
     payload = json.loads(file_path.read_text(encoding="utf-8"))
     if not isinstance(payload, Mapping):
@@ -203,7 +209,12 @@ def load_activity_file(
     if not points:
         return None
 
-    segments, validation_messages = validate_segments(points, max_speed_kmh)
+    speed_limit = (
+        max_speed_kmh
+        if max_speed_kmh is not None
+        else activity_speed_limit(find_activity_type(payload))
+    )
+    segments, validation_messages = validate_segments(points, speed_limit)
     return ActivityTrack(
         activity_id=find_activity_id(payload) or file_path.stem,
         name=find_activity_name(payload) or file_path.stem,
@@ -500,6 +511,32 @@ def find_activity_name(payload: Mapping[str, Any]) -> str | None:
             if value:
                 return str(value)
     return None
+
+
+def find_activity_type(payload: Mapping[str, Any]) -> str | None:
+    nested_containers = tuple(
+        value
+        for key in ("summary", "activity")
+        if isinstance((value := payload.get(key)), Mapping)
+    )
+    for container in (payload, *nested_containers):
+        value = container.get("activityType") or container.get("activity_type")
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, Mapping):
+            for key in ("typeKey", "key", "typeIdKey"):
+                nested = value.get(key)
+                if isinstance(nested, str) and nested:
+                    return nested
+    return None
+
+
+def activity_speed_limit(activity_type: str | None) -> float:
+    normalized = (activity_type or "").lower()
+    for markers, limit in ACTIVITY_SPEED_LIMITS_KMH:
+        if any(marker in normalized for marker in markers):
+            return limit
+    return DEFAULT_MAX_SEGMENT_SPEED_KMH
 
 
 def first_value_for_keys(item: Mapping[str, Any], keys: Iterable[str]) -> Any | None:

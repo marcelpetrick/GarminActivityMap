@@ -117,14 +117,14 @@ def install_observable_loader(
 
     def delayed_load_activity_result(
         file_path: Path,
-        max_speed_kmh: float,
+        max_speed_kmh: float | None,
     ) -> tuple[ActivityTrack | None, LoadWarning | None]:
         sleep(delay_seconds)
         return original_load_activity_result(file_path, max_speed_kmh)
 
     def load_directory_with_small_batches(
         root: Path,
-        max_speed_kmh: float = loader.DEFAULT_MAX_SEGMENT_SPEED_KMH,
+        max_speed_kmh: float | None = None,
         workers: int = 4,
         progress: Callable[
             [LoadReport, tuple[ActivityTrack, ...]],

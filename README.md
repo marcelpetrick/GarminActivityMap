@@ -37,28 +37,28 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.81`
+- Version: `0.0.82`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.81` with `python scripts/project_metrics.py`.
+Measured for version `0.0.82` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,733 | 3,220 | 29 | 241 |
+| Application (activity_map) | 18 | 3,766 | 3,249 | 29 | 243 |
 | Exporter (garmin_export) | 4 | 1,127 | 988 | 7 | 52 |
-| Tests | 20 | 4,013 | 3,251 | 9 | 221 |
+| Tests | 20 | 4,054 | 3,288 | 9 | 222 |
 | Benchmarks | 2 | 451 | 392 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **9,743** | **8,208** | **47** | **554** |
+| **Total** | **47** | **9,817** | **8,274** | **47** | **557** |
 
 | Property | Value |
 |---|---|
-| Test functions | 161 |
-| Test cases collected by pytest | 165 |
+| Test functions | 162 |
+| Test cases collected by pytest | 167 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -73,8 +73,8 @@ Largest modules:
 |---|---:|
 | `activity_map/widgets.py` | 1,291 |
 | `garmin_export/cli.py` | 845 |
-| `activity_map/loader.py` | 540 |
-| `activity_map/prepared_cache.py` | 413 |
+| `activity_map/loader.py` | 572 |
+| `activity_map/prepared_cache.py` | 414 |
 | `activity_map/render.py` | 310 |
 
 <!-- project-metrics:end -->
@@ -279,9 +279,11 @@ The selected track color is used for all activity tracks.
 Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Files without usable coordinates are skipped and summarized in the app instead of stopping the load.
 
 When timestamps are available, the loader validates their ordering and computes
-geodesic segment speeds. Segments above 30 km/h are flagged and disconnected
-from rendered geometry to suppress GPS spikes; the source JSON is never changed.
-Use `load_directory(path, max_speed_kmh=...)` to configure the threshold.
+geodesic segment speeds. Activity-aware speed ceilings distinguish walking,
+running, cycling, swimming, and snow sports while retaining a conservative
+fallback for unknown activity types; faster segments are flagged and disconnected
+from rendered geometry to suppress GPS spikes. The source JSON is never changed.
+Use `load_directory(path, max_speed_kmh=...)` to apply an explicit threshold.
 
 Loaded tracks retain timestamps and altitude where available, plus per-segment
 distance and speed, total distance, duration, and geographic bounds. Rendering

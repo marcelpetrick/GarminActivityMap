@@ -221,6 +221,48 @@ def test_timestamped_segments_flag_impossible_speed_without_changing_source(
     assert json.loads(activity_file.read_text()) == payload
 
 
+@pytest.mark.parametrize(
+    ("activity_type", "expected_valid"),
+    (("road_biking", True), ("running", False)),
+)
+def test_loader_uses_activity_aware_speed_limits(
+    tmp_path: Path,
+    activity_type: str,
+    expected_valid: bool,
+) -> None:
+    activity_file = tmp_path / f"{activity_type}.json"
+    write_json(
+        activity_file,
+        {
+            "summary": {"activityType": {"typeKey": activity_type}},
+            "polyline": [
+                {
+                    "lat": 52.0,
+                    "lon": 13.0,
+                    "timestamp": "2026-06-22T08:00:00Z",
+                },
+                {
+                    "lat": 52.009,
+                    "lon": 13.0,
+                    "timestamp": "2026-06-22T08:01:00Z",
+                },
+                {
+                    "lat": 52.018,
+                    "lon": 13.0,
+                    "timestamp": "2026-06-22T08:02:00Z",
+                },
+            ],
+        },
+    )
+
+    track = load_activity_file(activity_file)
+
+    assert track is not None
+    speeds = tuple(segment.speed_kmh for segment in track.segments)
+    assert speeds == pytest.approx((60.0, 60.0), rel=0.02)
+    assert all(segment.valid is expected_valid for segment in track.segments)
+
+
 def test_segment_validation_detects_duplicate_and_missing_timestamps() -> None:
     points = (
         TrackPoint(52.0, 13.0, datetime(2026, 6, 22, tzinfo=UTC)),

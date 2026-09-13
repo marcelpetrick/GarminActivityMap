@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .geo import ProjectedPoint
-from .loader import DEFAULT_MAX_SEGMENT_SPEED_KMH
+from .loader import ACTIVITY_SPEED_LIMITS_KMH, DEFAULT_MAX_SEGMENT_SPEED_KMH
 from .models import (
     ActivityTrack,
     LoadReport,
@@ -28,7 +28,7 @@ from .render import (
     RenderTrack,
 )
 
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_PREPARED_CACHE_DIR"
 CACHE_DISABLED_ENVIRONMENT = "ACTIVITY_MAP_DISABLE_PREPARED_CACHE"
 
@@ -130,6 +130,7 @@ def geometry_signature() -> str:
         "max_continuous_segment_meters": MAX_CONTINUOUS_SEGMENT_METERS,
         "min_rendered_track_points": MIN_RENDERED_TRACK_POINTS,
         "max_segment_speed_kmh": DEFAULT_MAX_SEGMENT_SPEED_KMH,
+        "activity_speed_limits_kmh": ACTIVITY_SPEED_LIMITS_KMH,
     }
     encoded = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
