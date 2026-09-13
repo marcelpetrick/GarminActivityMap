@@ -231,45 +231,66 @@ def load_activity_file(
 
 
 def extract_track_points(payload: Mapping[str, Any]) -> list[TrackPoint]:
-    points: list[TrackPoint] = []
+    metric_sources: list[list[TrackPoint]] = []
+    polyline_sources: list[list[TrackPoint]] = []
 
     for container in walk_track_containers(payload):
         polyline = container.get("polyline")
         if isinstance(polyline, Sequence) and not isinstance(polyline, str | bytes):
-            points.extend(point for point in parse_point_sequence(polyline) if point)
+            points = [point for point in parse_point_sequence(polyline) if point]
+            if points:
+                polyline_sources.append(deduplicate_adjacent(points))
 
-        descriptors = container.get("metricDescriptors")
-        rows = container.get("activityDetailMetrics")
-        if not isinstance(descriptors, Sequence) or not isinstance(rows, Sequence):
-            continue
+        points = extract_metric_points(container)
+        if points:
+            metric_sources.append(deduplicate_adjacent(points))
 
-        latitude_index = find_metric_index(descriptors, LATITUDE_METRIC_KEYS)
-        longitude_index = find_metric_index(descriptors, LONGITUDE_METRIC_KEYS)
-        timestamp_index = find_metric_index(descriptors, TIMESTAMP_METRIC_KEYS)
-        altitude_index = find_metric_index(descriptors, ALTITUDE_METRIC_KEYS)
-        if latitude_index is None or longitude_index is None:
-            continue
-
-        for row in rows:
-            if not isinstance(row, Mapping):
-                continue
-            metrics = row.get("metrics")
-            if not isinstance(metrics, Sequence):
-                continue
-            points.extend(
-                parse_metric_row(
-                    metrics,
-                    latitude_index,
-                    longitude_index,
-                    timestamp_index,
-                    altitude_index,
-                )
-            )
-
+    points = select_track_source(metric_sources, polyline_sources)
     if not points:
-        points.extend(extract_coordinate_dicts(payload))
+        points = extract_coordinate_dicts(payload)
 
     return deduplicate_adjacent(points)
+
+
+def extract_metric_points(container: Mapping[str, Any]) -> list[TrackPoint]:
+    descriptors = container.get("metricDescriptors")
+    rows = container.get("activityDetailMetrics")
+    if not isinstance(descriptors, Sequence) or not isinstance(rows, Sequence):
+        return []
+
+    latitude_index = find_metric_index(descriptors, LATITUDE_METRIC_KEYS)
+    longitude_index = find_metric_index(descriptors, LONGITUDE_METRIC_KEYS)
+    timestamp_index = find_metric_index(descriptors, TIMESTAMP_METRIC_KEYS)
+    altitude_index = find_metric_index(descriptors, ALTITUDE_METRIC_KEYS)
+    if latitude_index is None or longitude_index is None:
+        return []
+
+    points: list[TrackPoint] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        metrics = row.get("metrics")
+        if not isinstance(metrics, Sequence):
+            continue
+        points.extend(
+            parse_metric_row(
+                metrics,
+                latitude_index,
+                longitude_index,
+                timestamp_index,
+                altitude_index,
+            )
+        )
+    return points
+
+
+def select_track_source(
+    metric_sources: Sequence[list[TrackPoint]],
+    polyline_sources: Sequence[list[TrackPoint]],
+) -> list[TrackPoint]:
+    usable_metrics = [source for source in metric_sources if len(source) >= 2]
+    candidates = usable_metrics or list(polyline_sources) or list(metric_sources)
+    return max(candidates, key=len, default=[])
 
 
 def extract_coordinate_dicts(payload: Mapping[str, Any]) -> list[TrackPoint]:

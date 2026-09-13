@@ -72,6 +72,34 @@ def test_extract_track_points_supports_metric_descriptors() -> None:
     ]
 
 
+def test_extract_track_points_prefers_detailed_metrics_over_summary_polyline() -> None:
+    points = extract_track_points(
+        {
+            "activity": {
+                "geoPolylineDTO": {
+                    "polyline": [[52.5, 13.4], [52.6, 13.5], [52.7, 13.6]]
+                }
+            },
+            "details": {
+                "metricDescriptors": [
+                    {"key": "directTimestamp", "metricsIndex": 0},
+                    {"key": "directLatitude", "metricsIndex": 1},
+                    {"key": "directLongitude", "metricsIndex": 2},
+                ],
+                "activityDetailMetrics": [
+                    {"metrics": ["2026-01-01T08:00:00Z", 52.5, 13.4]},
+                    {"metrics": ["2026-01-01T08:01:00Z", 52.6, 13.5]},
+                    {"metrics": ["2026-01-01T08:02:00Z", 52.7, 13.6]},
+                ],
+            },
+        }
+    )
+
+    assert len(points) == 3
+    assert [point.latitude for point in points] == [52.5, 52.6, 52.7]
+    assert all(point.timestamp is not None for point in points)
+
+
 def test_extract_track_points_falls_back_to_coordinate_dicts() -> None:
     points = extract_track_points(
         {
