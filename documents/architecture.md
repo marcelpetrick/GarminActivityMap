@@ -144,7 +144,7 @@ sequenceDiagram
 - Documentation must build with `python scripts/build_docs.py`.
 - The full local pipeline must pass before each commit.
 - The same pipeline runs on GitHub Actions through `.github/workflows/local-pipeline.yml`, offscreen and with tile downloads disabled.
-- `.github/workflows/release.yml` publishes a tagged GitHub Release for every new version, but only after that same pipeline passes and the version is consistent across `VERSION`, `pyproject.toml`, and the package.
+- `.github/workflows/release.yml` publishes a tagged GitHub Release for every new version, but only after that same pipeline passes and the version is consistent across `VERSION`, `pyproject.toml`, and the package. Publication is resumable when tag creation succeeded but release creation did not: the existing tag is verified against the release commit and reused.
 - Major automated operations require a clean committed checkpoint verified by `scripts/agentPreflight.sh`.
 - Work packages remain isolated in reviewable commits with architecture and verification decisions recorded in commit history and documentation.
 - Any new user-facing workflow should include synthetic tests or an offscreen smoke check where practical.

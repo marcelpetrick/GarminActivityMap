@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.90` with `python scripts/project_metrics.py`.
+Measured for version `0.0.91` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
 | Application (activity_map) | 18 | 3,965 | 3,433 | 30 | 253 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,334 | 3,520 | 9 | 237 |
+| Tests | 21 | 4,357 | 3,535 | 9 | 239 |
 | Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **10,340** | **8,735** | **48** | **581** |
+| **Total** | **48** | **10,363** | **8,750** | **48** | **583** |
 
 | Property | Value |
 |---|---|
-| Test functions | 174 |
-| Test cases collected by pytest | 179 |
+| Test functions | 176 |
+| Test cases collected by pytest | 181 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -365,6 +365,11 @@ build, test, coverage, performance, and smoke gates that run locally passed. The
 badge stays grey until the workflow has completed a run on `master`, and GitHub
 caches badge images for a short while, so it can lag a minute behind a finished
 run.
+
+The release workflow validates the shared version, reruns the pipeline, creates
+an annotated tag, and publishes packages, documentation, metrics, and checksums
+as a public GitHub Release. If publication fails after the tag was pushed, a
+rerun verifies and reuses that tag instead of permanently skipping the release.
 
 Before a major automated operation, create a verified checkpoint and confirm
 the worktree is clean:

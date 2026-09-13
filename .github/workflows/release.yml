@@ -66,13 +66,16 @@ jobs:
           printf 'VERSION=%s\n' "${VERSION}" >> "${GITHUB_ENV}"
           printf 'TAG=v%s\n' "${VERSION}" >> "${GITHUB_ENV}"
 
-      - name: Skip versions that were already released
+      - name: Skip versions that already have a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            printf 'Tag %s already exists; bump VERSION to publish a new release.\n' "${TAG}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            printf 'GitHub Release %s already exists; nothing to publish.\n' "${TAG}"
             printf 'ALREADY_RELEASED=true\n' >> "${GITHUB_ENV}"
           else
+            printf 'GitHub Release %s is missing; publication will continue.\n' "${TAG}"
             printf 'ALREADY_RELEASED=false\n' >> "${GITHUB_ENV}"
           fi
 
@@ -120,12 +123,25 @@ jobs:
           } > release-notes.md
           cat release-notes.md
 
-      - name: Create the annotated tag
+      - name: Create or verify the annotated tag
         if: env.ALREADY_RELEASED == 'false'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            REMOTE_TAG_COMMIT="$(git ls-remote origin "refs/tags/${TAG}^{}" | awk 'NR == 1 {print $1}')"
+            if [[ -z "${REMOTE_TAG_COMMIT}" ]]; then
+              REMOTE_TAG_COMMIT="$(git ls-remote origin "refs/tags/${TAG}" | awk 'NR == 1 {print $1}')"
+            fi
+            if [[ "${REMOTE_TAG_COMMIT}" != "${GITHUB_SHA}" ]]; then
+              printf 'Existing tag %s points to %s, not release commit %s.\n' \
+                "${TAG}" "${REMOTE_TAG_COMMIT}" "${GITHUB_SHA}" >&2
+              exit 1
+            fi
+            printf 'Reusing existing tag %s at %s.\n' "${TAG}" "${GITHUB_SHA}"
+            exit 0
+          fi
           git tag -a "${TAG}" -m "Garmin Activity Map ${TAG}"
           git push origin "${TAG}"
 
