@@ -129,12 +129,22 @@ def test_prepared_cache_ignores_corrupt_and_disabled_entries(
     cache = PreparedGeometryCache(tmp_path / "cache")
     fingerprint = cache.fingerprint(tmp_path)
     cache.root.mkdir()
-    cache.cache_path(tmp_path).write_text("{broken", encoding="utf-8")
+    cache.cache_path(tmp_path).write_bytes(b"broken")
 
     assert cache.load(tmp_path, fingerprint) is None
 
     monkeypatch.setenv("ACTIVITY_MAP_DISABLE_PREPARED_CACHE", "1")
     assert cache.load(tmp_path, fingerprint) is None
+
+
+def test_prepared_cache_uses_compact_binary_snapshot(tmp_path: Path) -> None:
+    write_track(tmp_path / "one.json", 1)
+
+    load_and_prepare_directory(tmp_path)
+
+    snapshot = PreparedGeometryCache().cache_path(tmp_path)
+    assert snapshot.suffix == ".bin"
+    assert snapshot.read_bytes()[:1] != b"{"
 
 
 def test_prepared_cache_invalidates_changed_geometry_parameters(
@@ -163,7 +173,7 @@ def test_prepared_cache_invalidates_changed_geometry_parameters(
 
     assert reloaded == [dataset]
     snapshots = sorted(
-        path.name for path in cache.root.glob(f"{dataset_identity(dataset)}-*.json")
+        path.name for path in cache.root.glob(f"{dataset_identity(dataset)}-*.bin")
     )
     assert len(snapshots) == 1
 

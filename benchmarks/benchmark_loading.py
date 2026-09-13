@@ -20,6 +20,8 @@ from activity_map.loading import load_and_prepare_directory
 from activity_map.render import prepare_tracks_parallel
 from activity_map.widgets import MapCanvas
 
+MAX_PREPARED_CACHE_COLD_RATIO = 2.75
+
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -41,6 +43,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--max-load-to-display-ms",
         type=float,
         help="Exit non-zero when the sum of median stage timings exceeds this limit.",
+    )
+    parser.add_argument(
+        "--require-prepared-cache-benefit",
+        action="store_true",
+        help=(
+            "Require a warm prepared load to beat cold load plus preparation and "
+            "bound the first cached load relative to that baseline."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -128,9 +138,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.samples,
         )
         first_display_ms = measure(canvas.render_to_pixmap, args.samples)
+        prepared_cache_size_bytes = None
+        cold_cached_snapshot_ms = None
         cached_snapshot_ms = None
         if args.use_prepared_cache:
-            load_and_prepare_directory(root)
+            cold_cached_snapshot_ms = measure(
+                lambda: load_and_prepare_directory(root),
+                1,
+            )
+            prepared_cache_size_bytes = sum(
+                path.stat().st_size for path in (root / "prepared-cache").glob("*.bin")
+            )
             cached_snapshot_ms = measure(
                 lambda: load_and_prepare_directory(root),
                 args.samples,
@@ -148,6 +166,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"- Loader workers: {args.loader_workers}")
     print(f"- Preparation workers: {args.prepare_workers}")
     print(f"- Prepared cache: {'enabled' if args.use_prepared_cache else 'disabled'}")
+    if prepared_cache_size_bytes is not None:
+        print(f"- Prepared snapshot size: {prepared_cache_size_bytes / 2**20:.2f} MiB")
     print(f"- Canvas: {args.width} × {args.height}")
     print()
     print("| Operation | Median |")
@@ -157,6 +177,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"| Render preparation | {prepare_ms:.2f} ms |")
     print(f"| Canvas indexing and retained paths | {set_tracks_ms:.2f} ms |")
     print(f"| First offscreen display | {first_display_ms:.2f} ms |")
+    if cold_cached_snapshot_ms is not None:
+        print(
+            "| First cached load (including write) | "
+            f"{cold_cached_snapshot_ms:.2f} ms |"
+        )
     if cached_snapshot_ms is not None:
         print(f"| Repeat cached prepared snapshot | {cached_snapshot_ms:.2f} ms |")
     print(f"| **Load to first display** | **{load_to_display_ms:.2f} ms** |")
@@ -169,6 +194,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"FAIL: {load_to_display_ms:.2f} ms exceeds "
             f"{limit:.2f} ms load-to-display limit"
+        )
+        return 1
+    cold_prepare_ms = load_ms + prepare_ms
+    if args.require_prepared_cache_benefit and (
+        cold_cached_snapshot_ms is None or cached_snapshot_ms is None
+    ):
+        print("FAIL: --require-prepared-cache-benefit needs --use-prepared-cache")
+        return 1
+    if (
+        args.require_prepared_cache_benefit
+        and cached_snapshot_ms is not None
+        and cached_snapshot_ms >= cold_prepare_ms
+    ):
+        print(
+            f"FAIL: {cached_snapshot_ms:.2f} ms cached load does not beat "
+            f"{cold_prepare_ms:.2f} ms cold load plus preparation"
+        )
+        return 1
+    if (
+        args.require_prepared_cache_benefit
+        and cold_cached_snapshot_ms is not None
+        and cold_cached_snapshot_ms > cold_prepare_ms * MAX_PREPARED_CACHE_COLD_RATIO
+    ):
+        print(
+            f"FAIL: {cold_cached_snapshot_ms:.2f} ms first cached load exceeds "
+            f"{MAX_PREPARED_CACHE_COLD_RATIO:g} times the "
+            f"{cold_prepare_ms:.2f} ms cold baseline"
         )
         return 1
     return 0

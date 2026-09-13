@@ -177,6 +177,8 @@ performance_check() {
     --tracks 1000 \
     --points-per-track 300 \
     --samples 1 \
+    --use-prepared-cache \
+    --require-prepared-cache-benefit \
     --max-load-to-display-ms 8000 2>&1 | tee "$log"; then
     STEP_DETAIL="$(last_line "$log")"
     return 1

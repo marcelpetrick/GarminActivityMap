@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.87` with `python scripts/project_metrics.py`.
+Measured for version `0.0.88` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,785 | 3,264 | 29 | 245 |
+| Application (activity_map) | 18 | 3,792 | 3,271 | 29 | 245 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,173 | 3,389 | 9 | 228 |
-| Benchmarks | 2 | 451 | 392 | 1 | 17 |
+| Tests | 20 | 4,183 | 3,395 | 9 | 229 |
+| Benchmarks | 2 | 500 | 441 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **9,947** | **8,384** | **47** | **564** |
+| **Total** | **47** | **10,013** | **8,446** | **47** | **565** |
 
 | Property | Value |
 |---|---|
-| Test functions | 167 |
-| Test cases collected by pytest | 172 |
+| Test functions | 168 |
+| Test cases collected by pytest | 173 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -74,7 +74,7 @@ Largest modules:
 | `activity_map/widgets.py` | 1,291 |
 | `garmin_export/cli.py` | 837 |
 | `activity_map/loader.py` | 595 |
-| `activity_map/prepared_cache.py` | 410 |
+| `activity_map/prepared_cache.py` | 417 |
 | `activity_map/render.py` | 310 |
 
 <!-- project-metrics:end -->
@@ -289,8 +289,9 @@ distance and speed, total distance, duration, and geographic bounds. Rendering
 uses cached markers at broad zoom, simplified polylines at intermediate zoom,
 and full validated geometry when zoomed in.
 
-Parsed tracks and prepared geometry are cached under the platform cache
-directory for faster repeat startup. Cache entries are keyed by the resolved
+Parsed tracks and prepared geometry are cached in a compressed binary snapshot
+under the platform cache directory for faster repeat startup and substantially
+less disk and serialization overhead. Cache entries are keyed by the resolved
 dataset path, the geometry parameters that produced the snapshot (level-of-detail
 tolerances, simplification tolerance, segment-split distance, minimum rendered
 points, and the speed threshold), plus every activity file's relative path, size,
@@ -407,7 +408,8 @@ QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
 ```
 
 Use `--loader-workers` and `--prepare-workers` to compare concurrency settings,
-`--use-prepared-cache` to report repeat-snapshot loading, or
+`--use-prepared-cache` to report first-write and repeat-snapshot loading,
+`--require-prepared-cache-benefit` to enforce that the cache is worthwhile, or
 `--max-load-to-display-ms` to turn the cold measurement into a regression gate.
 
 ## Privacy

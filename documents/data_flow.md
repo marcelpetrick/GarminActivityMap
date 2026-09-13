@@ -124,8 +124,9 @@ sequenceDiagram
 
 Track loading and pure render preparation now execute away from the GUI thread.
 Repeat loads first validate a lightweight relative-path/size/mtime fingerprint
-and reuse a versioned prepared snapshot when it matches. Corrupt, missing, or
-stale cache entries fall back to the ordinary loader without failing the GUI.
+and reuse a versioned, compressed binary prepared snapshot when it matches.
+Corrupt, missing, or stale cache entries fall back to the ordinary loader
+without failing the GUI.
 The loader and process-preparation APIs support multiple workers, but measured
 defaults remain one worker because four threads did not improve local SSD JSON
 loading and four processes were slower after serialization. Tile network and

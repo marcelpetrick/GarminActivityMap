@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import marshal
 import os
+import sys
 import tempfile
+import zlib
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -32,7 +35,7 @@ from .render import (
     RenderTrack,
 )
 
-CACHE_SCHEMA_VERSION = 5
+CACHE_SCHEMA_VERSION = 6
 CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_PREPARED_CACHE_DIR"
 CACHE_DISABLED_ENVIRONMENT = "ACTIVITY_MAP_DISABLE_PREPARED_CACHE"
 
@@ -68,7 +71,8 @@ class PreparedGeometryCache:
         if not self.enabled:
             return None
         try:
-            value = json.loads(self.cache_path(dataset).read_text(encoding="utf-8"))
+            compressed = self.cache_path(dataset).read_bytes()
+            value = marshal.loads(zlib.decompress(compressed))
             if (
                 not isinstance(value, dict)
                 or value.get("schema") != CACHE_SCHEMA_VERSION
@@ -77,7 +81,7 @@ class PreparedGeometryCache:
             ):
                 return None
             return decode_snapshot(dataset, value)
-        except KeyError, OSError, TypeError, ValueError, json.JSONDecodeError:
+        except EOFError, KeyError, OSError, TypeError, ValueError, zlib.error:
             return None
 
     def save(
@@ -92,17 +96,17 @@ class PreparedGeometryCache:
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         destination = self.cache_path(dataset)
         payload = encode_snapshot(dataset, fingerprint, report, render_tracks)
+        compressed = zlib.compress(marshal.dumps(payload), level=1)
         temporary_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
+                mode="wb",
                 dir=self.root,
                 prefix=f".{destination.name}.",
                 delete=False,
             ) as temporary:
                 temporary_path = Path(temporary.name)
-                json.dump(payload, temporary, separators=(",", ":"))
+                temporary.write(compressed)
                 temporary.flush()
                 os.fsync(temporary.fileno())
             temporary_path.chmod(0o600)
@@ -113,13 +117,15 @@ class PreparedGeometryCache:
         self.discard_outdated_snapshots(dataset)
 
     def cache_path(self, dataset: Path) -> Path:
-        return self.root / f"{dataset_identity(dataset)}-{geometry_signature()}.json"
+        return self.root / f"{dataset_identity(dataset)}-{geometry_signature()}.bin"
 
     def discard_outdated_snapshots(self, dataset: Path) -> None:
         current = self.cache_path(dataset)
-        for path in self.root.glob(f"{dataset_identity(dataset)}-*.json"):
-            if path != current:
-                path.unlink(missing_ok=True)
+        identity = dataset_identity(dataset)
+        for pattern in (f"{identity}-*.bin", f"{identity}-*.json"):
+            for path in self.root.glob(pattern):
+                if path != current:
+                    path.unlink(missing_ok=True)
 
 
 def dataset_identity(dataset: Path) -> str:
@@ -129,6 +135,7 @@ def dataset_identity(dataset: Path) -> str:
 def geometry_signature() -> str:
     parameters = {
         "schema": CACHE_SCHEMA_VERSION,
+        "python_cache_tag": sys.implementation.cache_tag,
         "lod_tolerances": list(LOD_TOLERANCES),
         "simplification_tolerance": SIMPLIFICATION_TOLERANCE,
         "max_continuous_segment_meters": MAX_CONTINUOUS_SEGMENT_METERS,
@@ -158,7 +165,7 @@ def encode_snapshot(
     return {
         "schema": CACHE_SCHEMA_VERSION,
         "parameters": geometry_signature(),
-        "fingerprint": fingerprint,
+        "fingerprint": [list(item) for item in fingerprint],
         "files_read": report.files_read,
         "warnings": [
             [relative_source(dataset, warning.source_file), warning.message]
@@ -225,7 +232,7 @@ def encode_activity_track(dataset: Path, track: ActivityTrack) -> dict[str, Any]
             ]
             for segment in track.segments
         ],
-        "validation": track.validation_messages,
+        "validation": list(track.validation_messages),
         "distance": track.total_distance_meters,
         "duration": track.duration_seconds,
         "bounds": encode_track_bounds(track.bounds),
