@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from concurrent.futures import Future
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -27,7 +29,7 @@ from activity_map.replay import (
 )
 from activity_map.settings import SettingsStore
 from activity_map.spatial import TrackSpatialIndex
-from activity_map.tiles import TileCoordinate
+from activity_map.tiles import MIN_CACHE_SECONDS, TileCoordinate
 from activity_map.widgets import MainWindow, MapCanvas, gesture_transform
 
 
@@ -353,6 +355,53 @@ def test_canvas_tile_cache_and_future_paths(
     canvas._tile_result_callback(coordinate)(callback_future)
     assert coordinate not in canvas.pending_tiles
     canvas._store_tile(coordinate, b"invalid")
+
+
+def test_canvas_bounds_in_memory_tile_pixmaps(
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    monkeypatch.setattr(widgets, "MAX_MEMORY_TILE_PIXMAPS", 2)
+    coordinates = [TileCoordinate(2, x, 0) for x in range(3)]
+
+    for coordinate in coordinates:
+        canvas._store_tile(coordinate, png_bytes())
+
+    assert list(canvas.tile_pixmaps) == coordinates[1:]
+
+    monkeypatch.setattr(widgets, "MAX_TILE_STATE_ENTRIES", 2)
+    for coordinate in coordinates:
+        canvas._remember_tile_state(canvas.unusable_tiles, coordinate)
+    assert list(canvas.unusable_tiles) == coordinates[1:]
+
+
+def test_canvas_displays_stale_tile_while_requesting_one_refresh(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(400, 300)
+    canvas.tile_cache.root = tmp_path
+    canvas.set_tile_layer_enabled(True)
+    coordinate = TileCoordinate(0, 0, 0)
+    path = canvas.tile_cache.tile_path(coordinate)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(png_bytes())
+    stale_time = time.time() - MIN_CACHE_SECONDS - 60
+    os.utime(path, (stale_time, stale_time))
+    requested: list[TileCoordinate] = []
+    monkeypatch.setattr(widgets, "visible_tiles", lambda _: (coordinate,))
+    monkeypatch.setattr(canvas, "_request_tile", requested.append)
+
+    canvas.render_to_pixmap()
+    canvas.render_to_pixmap()
+
+    assert coordinate in canvas.tile_pixmaps
+    assert requested == [coordinate]
 
 
 def test_unreadable_tiles_are_discarded_and_not_requested_again(

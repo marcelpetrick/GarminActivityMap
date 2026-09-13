@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.88` with `python scripts/project_metrics.py`.
+Measured for version `0.0.89` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,792 | 3,271 | 29 | 245 |
+| Application (activity_map) | 18 | 3,906 | 3,378 | 29 | 252 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,183 | 3,395 | 9 | 229 |
-| Benchmarks | 2 | 500 | 441 | 1 | 17 |
+| Tests | 20 | 4,266 | 3,462 | 9 | 233 |
+| Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **10,013** | **8,446** | **47** | **565** |
+| **Total** | **47** | **10,213** | **8,622** | **47** | **576** |
 
 | Property | Value |
 |---|---|
-| Test functions | 168 |
-| Test cases collected by pytest | 173 |
+| Test functions | 172 |
+| Test cases collected by pytest | 177 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -71,7 +71,7 @@ Largest modules:
 
 | Module | Lines |
 |---|---:|
-| `activity_map/widgets.py` | 1,291 |
+| `activity_map/widgets.py` | 1,318 |
 | `garmin_export/cli.py` | 837 |
 | `activity_map/loader.py` | 595 |
 | `activity_map/prepared_cache.py` | 417 |
@@ -236,7 +236,7 @@ that may be capped by Garmin.
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers, with a burst of 24 downloads allowed so a fresh view fills immediately and a sustained ceiling of five downloads per second across all workers afterwards; tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Stale tiles remain visible while one background refresh is attempted. The in-memory tile set is capped at 256 images and the on-disk cache at 8,192 tiles or 512 MiB, whichever comes first, evicting the oldest entries first. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers, with a burst of 24 downloads allowed so a fresh view fills immediately and a sustained ceiling of five downloads per second across all workers afterwards; fresh tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
 
 Expected local layout:
 

@@ -27,6 +27,8 @@ MIN_DOWNLOAD_INTERVAL_SECONDS = 0.2
 DOWNLOAD_BURST = 24
 MIN_SLEEP_SECONDS = 0.001
 TILE_CACHE_DIRECTORY_ENVIRONMENT = "ACTIVITY_MAP_TILE_CACHE_DIR"
+MAX_DISK_CACHE_BYTES = 512 * 1024 * 1024
+MAX_DISK_CACHE_TILES = 8_192
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +53,8 @@ class TileCache:
         minimum_cache_seconds: int = MIN_CACHE_SECONDS,
         minimum_download_interval_seconds: float = MIN_DOWNLOAD_INTERVAL_SECONDS,
         download_burst: int = DOWNLOAD_BURST,
+        maximum_cache_bytes: int = MAX_DISK_CACHE_BYTES,
+        maximum_cache_tiles: int = MAX_DISK_CACHE_TILES,
     ) -> None:
         self.root = (root or default_tile_cache_directory()).expanduser()
         self.url_template = url_template
@@ -58,7 +62,12 @@ class TileCache:
         self.minimum_cache_seconds = minimum_cache_seconds
         self.minimum_download_interval_seconds = minimum_download_interval_seconds
         self.download_burst = max(download_burst, 1)
+        self.maximum_cache_bytes = max(maximum_cache_bytes, 0)
+        self.maximum_cache_tiles = max(maximum_cache_tiles, 0)
         self._download_lock = threading.Lock()
+        self._cache_lock = threading.RLock()
+        self._cache_entries: dict[Path, tuple[float, int]] | None = None
+        self._cache_size_bytes = 0
         self._next_download_at = 0.0
 
     def tile_path(self, coordinate: TileCoordinate) -> Path:
@@ -68,17 +77,31 @@ class TileCache:
 
     def load_cached_tile(self, coordinate: TileCoordinate) -> bytes | None:
         path = self.tile_path(coordinate)
-        if not path.exists():
+        try:
+            return path.read_bytes()
+        except OSError:
             return None
-        return path.read_bytes()
+
+    def is_cached_tile_fresh(self, coordinate: TileCoordinate) -> bool:
+        try:
+            return self._is_fresh(self.tile_path(coordinate))
+        except OSError:
+            return False
 
     def discard_tile(self, coordinate: TileCoordinate) -> None:
-        self.tile_path(coordinate).unlink(missing_ok=True)
+        path = self.tile_path(coordinate)
+        with self._cache_lock:
+            path.unlink(missing_ok=True)
+            if self._cache_entries is not None:
+                removed = self._cache_entries.pop(path, None)
+                if removed is not None:
+                    self._cache_size_bytes -= removed[1]
+            self._remove_empty_parents(path.parent)
 
     def fetch_tile(self, coordinate: TileCoordinate) -> bytes | None:
         cached = self.load_cached_tile(coordinate)
         path = self.tile_path(coordinate)
-        if cached is not None and self._is_fresh(path):
+        if cached is not None and self.is_cached_tile_fresh(coordinate):
             return cached
 
         try:
@@ -93,22 +116,86 @@ class TileCache:
         return fetched
 
     def _store_tile(self, path: Path, data: bytes) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                dir=path.parent,
-                prefix=f".{path.name}.",
-                delete=False,
-            ) as temporary:
-                temporary_path = Path(temporary.name)
-                temporary.write(data)
-                temporary.flush()
-                os.fsync(temporary.fileno())
-            temporary_path.replace(path)
-        finally:
-            if temporary_path is not None and temporary_path.exists():
-                temporary_path.unlink()
+        with self._cache_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    dir=path.parent,
+                    prefix=f".{path.name}.",
+                    delete=False,
+                ) as temporary:
+                    temporary_path = Path(temporary.name)
+                    temporary.write(data)
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                temporary_path.replace(path)
+            finally:
+                if temporary_path is not None and temporary_path.exists():
+                    temporary_path.unlink()
+            self.prune_cache(path)
+
+    def prune_cache(self, updated_path: Path | None = None) -> None:
+        with self._cache_lock:
+            if self._cache_entries is None or updated_path is None:
+                self._index_cache()
+            else:
+                previous = self._cache_entries.get(updated_path)
+                try:
+                    metadata = updated_path.stat()
+                except OSError:
+                    self._cache_entries.pop(updated_path, None)
+                    if previous is not None:
+                        self._cache_size_bytes -= previous[1]
+                else:
+                    self._cache_entries[updated_path] = (
+                        metadata.st_mtime,
+                        metadata.st_size,
+                    )
+                    self._cache_size_bytes += metadata.st_size - (
+                        previous[1] if previous is not None else 0
+                    )
+            self._evict_oldest_tiles()
+
+    def _index_cache(self) -> None:
+        entries: dict[Path, tuple[float, int]] = {}
+        for tile_path in self.root.rglob("*.png"):
+            try:
+                metadata = tile_path.stat()
+            except OSError:
+                continue
+            entries[tile_path] = (metadata.st_mtime, metadata.st_size)
+        self._cache_entries = entries
+        self._cache_size_bytes = sum(size for _modified, size in entries.values())
+
+    def _evict_oldest_tiles(self) -> None:
+        if self._cache_entries is None:
+            return
+        while (
+            self._cache_size_bytes > self.maximum_cache_bytes
+            or len(self._cache_entries) > self.maximum_cache_tiles
+        ):
+            tile_path, (_modified, size) = min(
+                self._cache_entries.items(),
+                key=lambda item: (item[1][0], item[0]),
+            )
+            try:
+                tile_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                return
+            self._cache_entries.pop(tile_path)
+            self._cache_size_bytes -= size
+            self._remove_empty_parents(tile_path.parent)
+
+    def _remove_empty_parents(self, directory: Path) -> None:
+        while directory != self.root:
+            try:
+                directory.rmdir()
+            except OSError:
+                break
+            directory = directory.parent
 
     def _pace_download(self) -> None:
         if self.minimum_download_interval_seconds <= 0:

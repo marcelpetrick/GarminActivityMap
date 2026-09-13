@@ -122,6 +122,20 @@ def test_tile_cache_refreshes_stale_tile(tmp_path: Path) -> None:
     assert cache.downloads == 1
 
 
+def test_tile_cache_reports_cached_freshness(tmp_path: Path) -> None:
+    coordinate = TileCoordinate(zoom=1, x=1, y=1)
+    cache = StubTileCache(root=tmp_path)
+    path = cache.tile_path(coordinate)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"cached")
+
+    assert cache.is_cached_tile_fresh(coordinate)
+    stale_time = time.time() - MIN_CACHE_SECONDS - 60
+    os.utime(path, (stale_time, stale_time))
+    assert not cache.is_cached_tile_fresh(coordinate)
+    assert not cache.is_cached_tile_fresh(TileCoordinate(1, 0, 0))
+
+
 def test_tile_cache_returns_stale_tile_when_download_fails(tmp_path: Path) -> None:
     coordinate = TileCoordinate(zoom=1, x=1, y=1)
     cache = StubTileCache(root=tmp_path, error=OSError("offline"))
@@ -153,6 +167,26 @@ def test_tile_cache_writes_leave_no_partial_files(tmp_path: Path) -> None:
     path = cache.tile_path(coordinate)
     assert path.read_bytes() == b"tile-bytes"
     assert sorted(entry.name for entry in path.parent.iterdir()) == [path.name]
+
+
+def test_tile_cache_prunes_oldest_files_to_disk_limits(tmp_path: Path) -> None:
+    cache = TileCache(
+        root=tmp_path,
+        maximum_cache_bytes=6,
+        maximum_cache_tiles=1,
+    )
+    old = cache.tile_path(TileCoordinate(zoom=2, x=0, y=0))
+    recent = cache.tile_path(TileCoordinate(zoom=2, x=1, y=0))
+
+    cache._store_tile(old, b"1234")
+    stale_time = time.time() - 60
+    os.utime(old, (stale_time, stale_time))
+    cache._store_tile(recent, b"5678")
+
+    assert not old.exists()
+    assert recent.read_bytes() == b"5678"
+    assert sum(path.stat().st_size for path in tmp_path.rglob("*.png")) <= 6
+    assert len(tuple(tmp_path.rglob("*.png"))) == 1
 
 
 def test_discard_tile_removes_unreadable_cache_entry(tmp_path: Path) -> None:

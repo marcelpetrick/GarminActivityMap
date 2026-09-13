@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
@@ -104,6 +105,8 @@ TEXT = "#e8f1ff"
 MUTED = "#8da2bd"
 GESTURE_SETTLE_MILLISECONDS = 60
 TILE_WORKERS = 2
+MAX_MEMORY_TILE_PIXMAPS = 256
+MAX_TILE_STATE_ENTRIES = 1_024
 
 
 class TileSignals(QObject):
@@ -144,9 +147,10 @@ class MapCanvas(QWidget):
         self.tile_opacity = 0.82
         self.tile_layer_enabled = os.environ.get("ACTIVITY_MAP_DISABLE_TILES") != "1"
         self.tile_cache = TileCache()
-        self.tile_pixmaps: dict[TileCoordinate, QPixmap] = {}
+        self.tile_pixmaps: OrderedDict[TileCoordinate, QPixmap] = OrderedDict()
         self.pending_tiles: set[TileCoordinate] = set()
-        self.unusable_tiles: set[TileCoordinate] = set()
+        self.unusable_tiles: OrderedDict[TileCoordinate, None] = OrderedDict()
+        self.tile_refresh_attempted: OrderedDict[TileCoordinate, None] = OrderedDict()
         self.tile_executor = ThreadPoolExecutor(max_workers=TILE_WORKERS)
         self.tile_signals = TileSignals()
         self.tile_signals.loaded.connect(self._store_tile)
@@ -458,6 +462,12 @@ class MapCanvas(QWidget):
             if pixmap is None:
                 self._request_tile(coordinate)
                 continue
+            if (
+                coordinate not in self.tile_refresh_attempted
+                and not self.tile_cache.is_cached_tile_fresh(coordinate)
+            ):
+                self._remember_tile_state(self.tile_refresh_attempted, coordinate)
+                self._request_tile(coordinate)
             bounds = tile_bounds(coordinate)
             top_left = self.viewport.world_to_screen(bounds.top_left)
             bottom_right = self.viewport.world_to_screen(bounds.bottom_right)
@@ -474,6 +484,7 @@ class MapCanvas(QWidget):
     def _tile_pixmap(self, coordinate: TileCoordinate) -> QPixmap | None:
         pixmap = self.tile_pixmaps.get(coordinate)
         if pixmap is not None:
+            self.tile_pixmaps.move_to_end(coordinate)
             return pixmap
         cached = self.tile_cache.load_cached_tile(coordinate)
         if cached is None:
@@ -482,8 +493,24 @@ class MapCanvas(QWidget):
         if not loaded.loadFromData(cached):
             self.tile_cache.discard_tile(coordinate)
             return None
-        self.tile_pixmaps[coordinate] = loaded
+        self._remember_tile(coordinate, loaded)
         return loaded
+
+    def _remember_tile(self, coordinate: TileCoordinate, pixmap: QPixmap) -> None:
+        self.tile_pixmaps[coordinate] = pixmap
+        self.tile_pixmaps.move_to_end(coordinate)
+        while len(self.tile_pixmaps) > MAX_MEMORY_TILE_PIXMAPS:
+            self.tile_pixmaps.popitem(last=False)
+
+    def _remember_tile_state(
+        self,
+        entries: OrderedDict[TileCoordinate, None],
+        coordinate: TileCoordinate,
+    ) -> None:
+        entries[coordinate] = None
+        entries.move_to_end(coordinate)
+        while len(entries) > MAX_TILE_STATE_ENTRIES:
+            entries.popitem(last=False)
 
     def _request_tile(self, coordinate: TileCoordinate) -> None:
         if coordinate in self.pending_tiles or coordinate in self.unusable_tiles:
@@ -518,9 +545,9 @@ class MapCanvas(QWidget):
     def _store_tile(self, coordinate: TileCoordinate, data: bytes) -> None:
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
-            self.tile_pixmaps[coordinate] = pixmap
+            self._remember_tile(coordinate, pixmap)
         else:
-            self.unusable_tiles.add(coordinate)
+            self._remember_tile_state(self.unusable_tiles, coordinate)
             self.tile_cache.discard_tile(coordinate)
         self.pending_tiles.discard(coordinate)
         self.update()
