@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.86` with `python scripts/project_metrics.py`.
+Measured for version `0.0.87` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,784 | 3,263 | 29 | 245 |
+| Application (activity_map) | 18 | 3,785 | 3,264 | 29 | 245 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,159 | 3,379 | 9 | 227 |
+| Tests | 20 | 4,173 | 3,389 | 9 | 228 |
 | Benchmarks | 2 | 451 | 392 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **9,932** | **8,373** | **47** | **563** |
+| **Total** | **47** | **9,947** | **8,384** | **47** | **564** |
 
 | Property | Value |
 |---|---|
-| Test functions | 166 |
-| Test cases collected by pytest | 171 |
+| Test functions | 167 |
+| Test cases collected by pytest | 172 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -73,8 +73,8 @@ Largest modules:
 |---|---:|
 | `activity_map/widgets.py` | 1,291 |
 | `garmin_export/cli.py` | 837 |
-| `activity_map/loader.py` | 590 |
-| `activity_map/prepared_cache.py` | 414 |
+| `activity_map/loader.py` | 595 |
+| `activity_map/prepared_cache.py` | 410 |
 | `activity_map/render.py` | 310 |
 
 <!-- project-metrics:end -->
@@ -275,7 +275,7 @@ Map colors:
 
 The selected track color is used for all activity tracks.
 
-Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Coordinate aliases are matched as explicit latitude/longitude pairs, including separate start and end pairs. Files without usable coordinates are skipped and summarized in the app instead of stopping the load. When both detailed metric samples and summary polylines are present, the detailed samples are used as the single canonical geometry source rather than joining duplicate representations.
+Supported Garmin export shapes include activity detail files with `geoPolylineDTO.polyline`, `activityDetailMetrics` coordinate metrics, and coordinate-like nested records. Coordinate aliases are matched as explicit latitude/longitude pairs, including separate start and end pairs. Exporter control files (`manifest.json` and `export-state.json`) are excluded from discovery and cache fingerprints. Files without usable coordinates are skipped and summarized in the app instead of stopping the load. When both detailed metric samples and summary polylines are present, the detailed samples are used as the single canonical geometry source rather than joining duplicate representations.
 
 When timestamps are available, the loader validates their ordering and computes
 geodesic segment speeds. Activity-aware speed ceilings distinguish walking,

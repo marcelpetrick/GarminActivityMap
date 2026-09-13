@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from .geo import ProjectedPoint
-from .loader import ACTIVITY_SPEED_LIMITS_KMH, DEFAULT_MAX_SEGMENT_SPEED_KMH
+from .loader import (
+    ACTIVITY_SPEED_LIMITS_KMH,
+    DEFAULT_MAX_SEGMENT_SPEED_KMH,
+    activity_files,
+)
 from .models import (
     ActivityTrack,
     LoadReport,
@@ -143,14 +147,6 @@ def default_cache_directory() -> Path:
     cache_home = os.environ.get("XDG_CACHE_HOME")
     root = Path(cache_home) if cache_home else Path.home() / ".cache"
     return root / "GarminActivityMap" / "prepared"
-
-
-def activity_files(dataset: Path) -> tuple[Path, ...]:
-    return tuple(
-        file_path
-        for file_path in sorted(dataset.rglob("*.json"))
-        if file_path.name != "manifest.json"
-    )
 
 
 def encode_snapshot(

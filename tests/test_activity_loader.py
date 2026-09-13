@@ -178,6 +178,7 @@ def test_simple_polyline_fast_path_preserves_coordinate_validation() -> None:
 
 def test_load_directory_skips_manifest_and_reports_bad_files(tmp_path: Path) -> None:
     write_json(tmp_path / "manifest.json", {"files": ["ignored"]})
+    write_json(tmp_path / "export-state.json", {"pending": 1})
     write_json(
         tmp_path / "valid.json",
         {

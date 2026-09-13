@@ -108,6 +108,19 @@ def test_prepared_cache_invalidates_changed_dataset(tmp_path: Path) -> None:
     assert second.report.tracks[0].activity_id == "2"
 
 
+def test_export_control_files_do_not_invalidate_prepared_cache(tmp_path: Path) -> None:
+    write_track(tmp_path / "one.json", 1)
+    cache = PreparedGeometryCache(tmp_path / "cache")
+    original = cache.fingerprint(tmp_path)
+
+    (tmp_path / "export-state.json").write_text(
+        json.dumps({"pending": 1}), encoding="utf-8"
+    )
+
+    assert cache.fingerprint(tmp_path) == original
+    assert load_directory(tmp_path).files_read == 1
+
+
 def test_prepared_cache_ignores_corrupt_and_disabled_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

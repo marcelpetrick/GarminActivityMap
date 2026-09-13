@@ -52,6 +52,7 @@ ACTIVITY_SPEED_LIMITS_KMH = (
     (("skiing", "snowboarding"), 200.0),
 )
 DEFAULT_PROGRESS_BATCH_SIZE = 50
+ACTIVITY_CONTROL_FILENAMES = frozenset({"manifest.json", "export-state.json"})
 
 
 def load_directory(
@@ -95,11 +96,7 @@ def load_directory_with_workers(
             warnings=(LoadWarning(root, "Directory does not exist"),),
         )
 
-    files = tuple(
-        file_path
-        for file_path in sorted(root.rglob("*.json"))
-        if file_path.name != "manifest.json"
-    )
+    files = activity_files(root)
     if workers == 1:
         results: Iterable[tuple[ActivityTrack | None, LoadWarning | None]] = (
             load_activity_result(file_path, max_speed_kmh) for file_path in files
@@ -164,6 +161,14 @@ def consume_load_results(
             LoadReport(root, files_read, tuple(tracks), tuple(warnings)),
             tuple(batch),
         )
+
+
+def activity_files(root: Path) -> tuple[Path, ...]:
+    return tuple(
+        file_path
+        for file_path in sorted(root.rglob("*.json"))
+        if file_path.name not in ACTIVITY_CONTROL_FILENAMES
+    )
 
 
 def load_activity_result_from_work(
