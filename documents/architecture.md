@@ -94,7 +94,7 @@ flowchart LR
 - `activity_map.loader` recursively reads Garmin JSON files, validates coordinates and timestamps, computes segment speed, and flags malformed, coordinate-free, or implausible geometry without changing source payloads.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
 - `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
-- `activity_map.loading` coordinates background loading and immutable prepared snapshots without blocking the GUI thread.
+- `activity_map.loading` coordinates cooperatively cancellable background loading and immutable prepared snapshots without blocking the GUI thread.
 - `activity_map.dates` parses and formats the single `YYYY-MM-DD` date vocabulary shared by the UI and the settings store.
 - `activity_map.filters` reports the date span of a prepared set and selects the tracks inside an inclusive, optionally open-ended range.
 - `activity_map.replay` maps replay progress onto a date span and reports which tracks have been reached, so the animation itself is pure and testable.

@@ -53,13 +53,21 @@ ACTIVITY_SPEED_LIMITS_KMH = (
 )
 DEFAULT_PROGRESS_BATCH_SIZE = 50
 ACTIVITY_CONTROL_FILENAMES = frozenset({"manifest.json", "export-state.json"})
+CancellationCheck = Callable[[], bool]
+
+
+class LoadCancelled(RuntimeError):
+    """Raised when an activity-directory load is superseded or stopped."""
 
 
 def load_directory(
     root: Path,
     max_speed_kmh: float | None = None,
+    cancelled: CancellationCheck | None = None,
 ) -> LoadReport:
-    return load_directory_with_workers(root, max_speed_kmh, workers=1)
+    return load_directory_with_workers(
+        root, max_speed_kmh, workers=1, cancelled=cancelled
+    )
 
 
 def load_directory_parallel(
@@ -68,6 +76,7 @@ def load_directory_parallel(
     workers: int = 4,
     progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
     progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
+    cancelled: CancellationCheck | None = None,
 ) -> LoadReport:
     return load_directory_with_workers(
         root,
@@ -75,6 +84,7 @@ def load_directory_parallel(
         workers=max(workers, 1),
         progress=progress,
         progress_batch_size=max(progress_batch_size, 1),
+        cancelled=cancelled,
     )
 
 
@@ -84,10 +94,12 @@ def load_directory_with_workers(
     workers: int,
     progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None = None,
     progress_batch_size: int = DEFAULT_PROGRESS_BATCH_SIZE,
+    cancelled: CancellationCheck | None = None,
 ) -> LoadReport:
     warnings: list[LoadWarning] = []
     tracks: list[ActivityTrack] = []
 
+    raise_if_cancelled(cancelled)
     if not root.exists():
         return LoadReport(
             root=root,
@@ -97,6 +109,7 @@ def load_directory_with_workers(
         )
 
     files = activity_files(root)
+    raise_if_cancelled(cancelled)
     if workers == 1:
         results: Iterable[tuple[ActivityTrack | None, LoadWarning | None]] = (
             load_activity_result(file_path, max_speed_kmh) for file_path in files
@@ -109,9 +122,11 @@ def load_directory_with_workers(
             warnings,
             progress,
             progress_batch_size,
+            cancelled,
         )
     else:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        try:
             results = executor.map(
                 load_activity_result_from_work,
                 ((file_path, max_speed_kmh) for file_path in files),
@@ -124,7 +139,16 @@ def load_directory_with_workers(
                 warnings,
                 progress,
                 progress_batch_size,
+                cancelled,
             )
+        except LoadCancelled:
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        except BaseException:
+            executor.shutdown(cancel_futures=True)
+            raise
+        else:
+            executor.shutdown()
 
     return LoadReport(
         root=root,
@@ -142,8 +166,10 @@ def consume_load_results(
     warnings: list[LoadWarning],
     progress: Callable[[LoadReport, tuple[ActivityTrack, ...]], None] | None,
     progress_batch_size: int,
+    cancelled: CancellationCheck | None,
 ) -> None:
     batch: list[ActivityTrack] = []
+    raise_if_cancelled(cancelled)
     for track, warning in results:
         if warning is not None:
             warnings.append(warning)
@@ -156,11 +182,17 @@ def consume_load_results(
                 tuple(batch),
             )
             batch.clear()
+        raise_if_cancelled(cancelled)
     if progress is not None and batch:
         progress(
             LoadReport(root, files_read, tuple(tracks), tuple(warnings)),
             tuple(batch),
         )
+
+
+def raise_if_cancelled(cancelled: CancellationCheck | None) -> None:
+    if cancelled is not None and cancelled():
+        raise LoadCancelled("Activity load was cancelled")
 
 
 def activity_files(root: Path) -> tuple[Path, ...]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from pytestqt.qtbot import QtBot
 
 import activity_map.widgets as widgets
 from activity_map.geo import ProjectedPoint, ScreenPoint, Viewport
+from activity_map.loader import LoadCancelled
 from activity_map.loading import PreparedLoad
 from activity_map.models import (
     ActivityTrack,
@@ -635,6 +637,7 @@ def test_reload_keeps_previous_tracks_visible_until_new_data_arrives(
         _loader_workers: int,
         _preparation_workers: int,
         _progress: object,
+        _cancelled: object,
     ) -> PreparedLoad:
         assert release.wait(timeout=5)
         return PreparedLoad(report, prepared)
@@ -716,6 +719,7 @@ def test_partial_load_progress_installs_tracks_before_completion(
         _loader_workers: int,
         _preparation_workers: int,
         progress: object,
+        _cancelled: object,
     ) -> PreparedLoad:
         assert callable(progress)
         progress(PreparedLoad(report, prepared))
@@ -734,6 +738,46 @@ def test_partial_load_progress_installs_tracks_before_completion(
     release.set()
     qtbot.waitUntil(lambda: window.report == report)
     assert len(window.canvas.render_tracks) == 1
+
+
+def test_new_directory_cancels_the_running_load(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    first_started = Event()
+    first_cancelled = Event()
+    second_report = LoadReport(second, 0, (), ())
+
+    def cooperative_load(
+        path: Path,
+        _loader_workers: int,
+        _preparation_workers: int,
+        _progress: object,
+        cancelled: Callable[[], bool],
+    ) -> PreparedLoad:
+        if path == first:
+            first_started.set()
+            while not cancelled():
+                time.sleep(0.001)
+            first_cancelled.set()
+            raise LoadCancelled("superseded")
+        return PreparedLoad(second_report, ())
+
+    monkeypatch.setattr(widgets, "load_and_prepare_directory", cooperative_load)
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.load_path(first)
+    assert first_started.wait(timeout=1)
+    window.load_path(second)
+
+    qtbot.waitUntil(first_cancelled.is_set)
+    qtbot.waitUntil(lambda: window.report == second_report)
 
 
 def dated_activity(activity_id: str, day: int | None) -> ActivityTrack:

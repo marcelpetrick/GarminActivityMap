@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from threading import Event
 
 import pytest
 
 import activity_map.loading as loading
 import activity_map.prepared_cache as prepared_cache
-from activity_map.loader import load_directory, load_directory_parallel
+from activity_map.loader import LoadCancelled, load_directory, load_directory_parallel
 from activity_map.loading import PreparedLoad, load_and_prepare_directory
 from activity_map.prepared_cache import PreparedGeometryCache, dataset_identity
 
@@ -75,6 +76,27 @@ def test_load_and_prepare_directory_publishes_incremental_batches(
     assert len(result.report.tracks) == 3
     assert sum(len(update.render_tracks) for update in updates) == 3
     assert updates[-1].report.tracks == result.report.tracks
+
+
+def test_parallel_loader_stops_between_batches_when_cancelled(tmp_path: Path) -> None:
+    for activity_id in range(3):
+        write_track(tmp_path / f"{activity_id}.json", activity_id)
+    cancellation = Event()
+
+    def cancel_after_first_batch(
+        _report: object,
+        _tracks: object,
+    ) -> None:
+        cancellation.set()
+
+    with pytest.raises(LoadCancelled, match="cancelled"):
+        load_directory_parallel(
+            tmp_path,
+            workers=1,
+            progress=cancel_after_first_batch,
+            progress_batch_size=1,
+            cancelled=cancellation.is_set,
+        )
 
 
 def test_load_and_prepare_directory_reuses_prepared_cache(

@@ -132,6 +132,7 @@ def install_observable_loader(
         ]
         | None = None,
         progress_batch_size: int = loader.DEFAULT_PROGRESS_BATCH_SIZE,
+        cancelled: Callable[[], bool] | None = None,
     ) -> LoadReport:
         return loader.load_directory_parallel(
             root,
@@ -139,6 +140,7 @@ def install_observable_loader(
             workers=workers,
             progress=progress,
             progress_batch_size=min(progress_batch_size, progress_batch_size_override),
+            cancelled=cancelled,
         )
 
     monkeypatch.setattr(loader, "load_activity_result", delayed_load_activity_result)

@@ -123,6 +123,9 @@ sequenceDiagram
 ```
 
 Track loading and pure render preparation now execute away from the GUI thread.
+Choosing a different directory signals the active load to stop between files or
+preparation batches, allowing its replacement to begin on the single load
+executor without waiting for the entire superseded dataset.
 Repeat loads first validate a lightweight relative-path/size/mtime fingerprint
 and reuse a versioned, compressed binary prepared snapshot when it matches.
 Corrupt, missing, or stale cache entries fall back to the ordinary loader

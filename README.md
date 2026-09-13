@@ -44,21 +44,21 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.89` with `python scripts/project_metrics.py`.
+Measured for version `0.0.90` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,906 | 3,378 | 29 | 252 |
+| Application (activity_map) | 18 | 3,965 | 3,433 | 30 | 253 |
 | Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
-| Tests | 20 | 4,266 | 3,462 | 9 | 233 |
+| Tests | 20 | 4,334 | 3,520 | 9 | 237 |
 | Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **10,213** | **8,622** | **47** | **576** |
+| **Total** | **47** | **10,340** | **8,735** | **48** | **581** |
 
 | Property | Value |
 |---|---|
-| Test functions | 172 |
-| Test cases collected by pytest | 177 |
+| Test functions | 174 |
+| Test cases collected by pytest | 179 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -71,9 +71,9 @@ Largest modules:
 
 | Module | Lines |
 |---|---:|
-| `activity_map/widgets.py` | 1,318 |
+| `activity_map/widgets.py` | 1,335 |
 | `garmin_export/cli.py` | 837 |
-| `activity_map/loader.py` | 595 |
+| `activity_map/loader.py` | 627 |
 | `activity_map/prepared_cache.py` | 417 |
 | `activity_map/render.py` | 310 |
 
@@ -261,7 +261,7 @@ Controls:
 - Map Opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
-- While a directory is still loading, the map keeps fitting each newly arriving batch of tracks until you pan or zoom. After that the view stays where you put it, and Reset View or a double-click hands control back to automatic fitting.
+- While a directory is still loading, the map keeps fitting each newly arriving batch of tracks until you pan or zoom. Selecting another directory cooperatively cancels the superseded load so the new one can start promptly. After that the view stays where you put it, and Reset View or a double-click hands control back to automatic fitting.
 - Replay over time: animate the loaded archive chronologically. The map starts empty and tracks appear in recording order, with the whole date span compressed into ten seconds regardless of how long it covers. The label reports the date currently reached and the progress. Press the button again to stop early; when the replay finishes, or is stopped, the normal view returns. A replay respects an active date range and animates only that period, and it ends by showing everything again so it can simply be started once more.
 - The bottom-right scale shows one rounded 1/2/5-style distance in kilometers for the current map latitude and zoom.
 

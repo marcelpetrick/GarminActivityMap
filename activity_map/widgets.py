@@ -6,6 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
+from threading import Event
 
 from PyQt6.QtCore import (
     QDate,
@@ -61,6 +62,7 @@ from .geo import (
     latitude_from_projected_y,
     project_point,
 )
+from .loader import LoadCancelled
 from .loading import PreparedLoad, load_and_prepare_directory
 from .lod import select_lod
 from .models import ActivityTrack, LoadReport, TrackPoint
@@ -696,6 +698,7 @@ class MainWindow(QMainWindow):
         self._installed_generation: int | None = None
         self._active_load_path: Path | None = None
         self._active_load_future: Future[PreparedLoad] | None = None
+        self._load_cancel_event: Event | None = None
         self.settings_store = settings_store or SettingsStore()
         self.settings = self.settings_store.load()
         self.settings.last_run_timestamp = (
@@ -871,8 +874,12 @@ class MainWindow(QMainWindow):
         ):
             self.status_label.setText(f"Still loading {path}...")
             return
+        if self._load_cancel_event is not None:
+            self._load_cancel_event.set()
         self._load_generation += 1
         generation = self._load_generation
+        cancel_event = Event()
+        self._load_cancel_event = cancel_event
         self._active_load_path = resolved_path
         self.report = None
         self.stop_replay()
@@ -884,11 +891,15 @@ class MainWindow(QMainWindow):
             1,
             1,
             lambda result: self.load_signals.progressed.emit(generation, result),
+            cancel_event.is_set,
         )
         self._active_load_future = future
         future.add_done_callback(self._load_result_callback(generation))
 
     def load_path_sync(self, path: Path) -> None:
+        if self._load_cancel_event is not None:
+            self._load_cancel_event.set()
+        self._load_cancel_event = None
         self._load_generation += 1
         result = load_and_prepare_directory(path)
         self._apply_load_result(self._load_generation, result)
@@ -900,6 +911,8 @@ class MainWindow(QMainWindow):
         def callback(future: Future[PreparedLoad]) -> None:
             try:
                 result = future.result()
+            except LoadCancelled:
+                return
             except Exception as exc:
                 self.load_signals.failed.emit(generation, str(exc))
                 return
@@ -913,6 +926,7 @@ class MainWindow(QMainWindow):
         self.report = result.report
         self._active_load_path = None
         self._active_load_future = None
+        self._load_cancel_event = None
         if self._installed_generation != generation or len(
             self.canvas.render_tracks
         ) != len(result.render_tracks):
@@ -963,6 +977,7 @@ class MainWindow(QMainWindow):
         self.warning_label.setText(message)
         self._active_load_path = None
         self._active_load_future = None
+        self._load_cancel_event = None
 
     def load_last_directory(self) -> None:
         if self.settings.last_track_directory is None:
@@ -1124,6 +1139,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent | None) -> None:
         self.replay_timer.stop()
         self._load_generation += 1
+        if self._load_cancel_event is not None:
+            self._load_cancel_event.set()
         self.load_executor.shutdown(wait=False, cancel_futures=True)
         self.canvas.shutdown_tiles()
         if event is not None:
