@@ -708,12 +708,18 @@ def test_summary_only_files_are_kept_when_details_are_disabled(tmp_path: Path) -
     assert client.detail_calls == []
 
 
-def test_detail_detection_falls_back_to_parsing_the_whole_file(
+def test_detail_detection_requires_valid_activity_and_details_payloads(
     tmp_path: Path,
 ) -> None:
-    foreign = tmp_path / "foreign.json"
-    foreign.write_text(
-        json.dumps({"summary": {"note": "x" * 2_000}, "details": {"metrics": []}}),
+    complete = tmp_path / "complete.json"
+    complete.write_text(
+        json.dumps(
+            {
+                "summary": {"note": "x" * 2_000},
+                "activity": {},
+                "details": {"metrics": []},
+            }
+        ),
         encoding="utf-8",
     )
     summary_only = tmp_path / "summary-only.json"
@@ -721,11 +727,17 @@ def test_detail_detection_falls_back_to_parsing_the_whole_file(
         json.dumps({"summary": {"note": "x" * 2_000}}),
         encoding="utf-8",
     )
+    activity_only = tmp_path / "activity-only.json"
+    activity_only.write_text(json.dumps({"activity": {}}), encoding="utf-8")
+    details_only = tmp_path / "details-only.json"
+    details_only.write_text(json.dumps({"details": {}}), encoding="utf-8")
     truncated = tmp_path / "truncated.json"
-    truncated.write_text('{"summary": {"note": "x', encoding="utf-8")
+    truncated.write_text('{"activity": {}, "details": {', encoding="utf-8")
 
-    assert has_detail_payload(foreign) is True
+    assert has_detail_payload(complete) is True
     assert has_detail_payload(summary_only) is False
+    assert has_detail_payload(activity_only) is False
+    assert has_detail_payload(details_only) is False
     assert has_detail_payload(truncated) is False
     assert has_detail_payload(tmp_path / "missing.json") is False
 

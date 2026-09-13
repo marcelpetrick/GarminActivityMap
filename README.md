@@ -44,16 +44,16 @@ python -m activity_map data/garmin
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.82` with `python scripts/project_metrics.py`.
+Measured for version `0.0.83` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
-| Application (activity_map) | 18 | 3,766 | 3,249 | 29 | 243 |
-| Exporter (garmin_export) | 4 | 1,127 | 988 | 7 | 52 |
-| Tests | 20 | 4,054 | 3,288 | 9 | 222 |
+| Application (activity_map) | 18 | 3,771 | 3,254 | 29 | 243 |
+| Exporter (garmin_export) | 4 | 1,119 | 982 | 7 | 51 |
+| Tests | 20 | 4,067 | 3,301 | 9 | 222 |
 | Benchmarks | 2 | 451 | 392 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **47** | **9,817** | **8,274** | **47** | **557** |
+| **Total** | **47** | **9,827** | **8,286** | **47** | **556** |
 
 | Property | Value |
 |---|---|
@@ -72,8 +72,8 @@ Largest modules:
 | Module | Lines |
 |---|---:|
 | `activity_map/widgets.py` | 1,291 |
-| `garmin_export/cli.py` | 845 |
-| `activity_map/loader.py` | 572 |
+| `garmin_export/cli.py` | 837 |
+| `activity_map/loader.py` | 577 |
 | `activity_map/prepared_cache.py` | 414 |
 | `activity_map/render.py` | 310 |
 
@@ -159,14 +159,11 @@ everything. Add `--verbose` for a timestamped line per Garmin request, retry,
 and file write.
 
 A detailed run also completes activities that were previously exported with
-`--no-details`: a stored file that contains only the `summary` payload is
-reported as `Summary only` in the plan and its `activity` and `details` payloads
-are fetched, so switching from a summary-only export to a full export fills the
-missing detail data instead of leaving those activities incomplete forever. A
-summary-only run leaves such files untouched. Detection reads the head of each
-stored file and falls back to parsing it completely when that is inconclusive,
-so a file written with a different key order is recognised as complete instead
-of being downloaded again.
+`--no-details`: a stored file that is not valid JSON containing both the
+`activity` and `details` payloads is reported as `Summary only` in the plan and
+those payloads are fetched. Switching from a summary-only export to a full
+export therefore fills the missing detail data instead of leaving those
+activities incomplete forever. A summary-only run leaves such files untouched.
 
 For a cautious 2026 export:
 
