@@ -777,6 +777,10 @@ def test_detail_detection_requires_valid_activity_and_details_payloads(
     activity_only.write_text(json.dumps({"activity": {}}), encoding="utf-8")
     details_only = tmp_path / "details-only.json"
     details_only.write_text(json.dumps({"details": {}}), encoding="utf-8")
+    null_payloads = tmp_path / "null-payloads.json"
+    null_payloads.write_text(
+        json.dumps({"activity": None, "details": None}), encoding="utf-8"
+    )
     truncated = tmp_path / "truncated.json"
     truncated.write_text('{"activity": {}, "details": {', encoding="utf-8")
 
@@ -784,6 +788,7 @@ def test_detail_detection_requires_valid_activity_and_details_payloads(
     assert has_detail_payload(summary_only) is False
     assert has_detail_payload(activity_only) is False
     assert has_detail_payload(details_only) is False
+    assert has_detail_payload(null_payloads) is False
     assert has_detail_payload(truncated) is False
     assert has_detail_payload(tmp_path / "missing.json") is False
 

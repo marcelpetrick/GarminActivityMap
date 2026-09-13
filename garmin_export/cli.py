@@ -483,7 +483,9 @@ def has_detail_payload(path: Path) -> bool:
             payload = json.load(file)
     except OSError, ValueError:
         return False
-    return isinstance(payload, dict) and DETAIL_KEYS.issubset(payload)
+    return isinstance(payload, dict) and all(
+        isinstance(payload.get(key), dict) for key in DETAIL_KEYS
+    )
 
 
 def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
