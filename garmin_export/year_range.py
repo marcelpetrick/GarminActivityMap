@@ -11,13 +11,16 @@ from .cli import (
     DEFAULT_PAGE_SIZE,
     DEFAULT_REQUEST_INTERVAL_SECONDS,
     ExportConfig,
+    ExportProgress,
     ExportResult,
     GarminClient,
+    RequestExecutor,
     build_client,
     export_activities,
     validate_date_arg,
     verbose_log,
 )
+from .request_errors import ExportStopped
 
 DEFAULT_END_YEAR = 2017
 DEFAULT_OUTPUT_ROOT = Path("data/garmin")
@@ -47,7 +50,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = parse_args(argv)
     client = build_client()
     client.login(config.tokenstore)
-    results = export_year_range(client, config)
+    try:
+        results = export_year_range(client, config)
+    except ExportStopped as exc:
+        print(str(exc))
+        return 1
 
     for line in describe_year_range_results(results):
         print(line)
@@ -213,6 +220,9 @@ def export_year_range(
 ) -> list[ExportResult]:
     results: list[ExportResult] = []
     years = years_inclusive(config.start_year, config.end_year)
+    executor = RequestExecutor(
+        export_config_for_year(config, years[0]), ExportProgress("", "")
+    )
     print(
         f"Garmin year export: {len(years)} years "
         f"({years[0]} to {years[-1]}) into {config.output_root}"
@@ -224,7 +234,9 @@ def export_year_range(
     for position, year in enumerate(years, start=1):
         print(f"Year {year} ({position}/{len(years)})")
         verbose_log(config.verbose, f"Exporting Garmin activities for {year}")
-        result = export_activities(client, export_config_for_year(config, year))
+        result = export_activities(
+            client, export_config_for_year(config, year), executor
+        )
         results.append(result)
         verbose_log(
             config.verbose,

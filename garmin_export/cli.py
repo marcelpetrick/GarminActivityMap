@@ -13,6 +13,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Protocol, TypeVar, cast
 
+from .request_errors import ExportStopped, retry_after_seconds, status_code
+
 DEFAULT_OUTPUT_DIR = Path("data/garmin/activities")
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_DETAIL_DELAY_SECONDS = 3.0
@@ -105,6 +107,8 @@ class ExportProgress:
     retries: int = 0
     estimated_completion_at: str | None = None
     failed_activity_ids: list[str] | None = None
+    status: str = "collecting"
+    stopped_reason: str | None = None
 
 
 class RequestExecutor:
@@ -112,8 +116,11 @@ class RequestExecutor:
         self.config = config
         self.progress = progress
         self._last_request_at: float | None = None
+        self._stopped: ExportStopped | None = None
 
     def call(self, operation: Callable[[], T], description: str) -> T:
+        if self._stopped is not None:
+            raise self._stopped
         attempt = 0
         while True:
             self._pace()
@@ -123,12 +130,26 @@ class RequestExecutor:
                 return result
             except Exception as exc:
                 self._last_request_at = monotonic_seconds()
+                status = status_code(exc)
+                if status in {401, 403} or (
+                    status == 429 and attempt >= self.config.max_retries
+                ):
+                    self._stopped = ExportStopped(
+                        f"Stopped export after HTTP {status} for {description}; "
+                        "remaining activities are pending. Resume later."
+                    )
+                    raise self._stopped from exc
                 if not is_retryable_error(exc) or attempt >= self.config.max_retries:
                     raise
                 delay = min(
                     self.config.backoff_initial_seconds * (2**attempt),
                     self.config.backoff_max_seconds,
                 )
+                server_delay = retry_after_seconds(exc)
+                if server_delay is not None:
+                    delay = max(delay, server_delay)
+                elif status == 429:
+                    delay = max(delay, 60.0)
                 attempt += 1
                 self.progress.retries += 1
                 verbose_log(
@@ -169,7 +190,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     client = build_client()
     client.login(config.tokenstore)
-    result = export_activities(client, config)
+    try:
+        result = export_activities(client, config)
+    except ExportStopped as exc:
+        print(str(exc))
+        return 1
 
     print(
         f"Exported {result.activity_count} activities to {result.output_dir}; "
@@ -317,7 +342,11 @@ def build_client() -> GarminClient:
     )
 
 
-def export_activities(client: GarminClient, config: ExportConfig) -> ExportResult:
+def export_activities(
+    client: GarminClient,
+    config: ExportConfig,
+    executor: RequestExecutor | None = None,
+) -> ExportResult:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     activity_dir = config.output_dir / "activities"
     activity_dir.mkdir(exist_ok=True)
@@ -329,16 +358,23 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
         updated_at=exported_at,
         failed_activity_ids=[],
     )
-    executor = RequestExecutor(config, progress)
+    executor = executor or RequestExecutor(config, progress)
+    executor.progress = progress
     files: list[str] = []
     skipped_existing_count = 0
     downloaded_count = 0
     print(f"Collecting Garmin activity list for {date_range_label(config)} ...")
     verbose_log(config.verbose, f"Collecting activities for {date_range_label(config)}")
-    activities = collect_activities(client, config, executor)
+    write_progress(config.output_dir, progress)
+    try:
+        activities = collect_activities(client, config, executor)
+    except ExportStopped as exc:
+        record_stopped_export(config, progress, exc)
+        raise
     activity_total = len(activities)
     progress.total = activity_total
     progress.pending = activity_total
+    progress.status = "downloading"
     write_progress(config.output_dir, progress)
     verbose_log(config.verbose, f"Found {activity_total} activities")
     plan = build_export_plan(activities, config)
@@ -388,6 +424,9 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
                     partial(client.get_activity_details, activity_id),
                     f"activity details {activity_id}",
                 )
+            except ExportStopped as exc:
+                record_stopped_export(config, progress, exc)
+                raise
             except Exception as exc:
                 progress.failures += 1
                 progress.pending -= 1
@@ -418,6 +457,8 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
                 f"{progress.failures} failed" + estimated_completion_label(progress)
             )
 
+    progress.status = "incomplete" if progress.failures else "complete"
+    update_progress(config.output_dir, progress)
     manifest = ExportResult(
         output_dir=str(config.output_dir),
         exported_at=exported_at,
@@ -438,6 +479,16 @@ def export_activities(client: GarminClient, config: ExportConfig) -> ExportResul
     for line in describe_result(manifest, monotonic_seconds() - started_at):
         print(line)
     return manifest
+
+
+def record_stopped_export(
+    config: ExportConfig, progress: ExportProgress, exc: ExportStopped
+) -> None:
+    progress.status = "stopped"
+    progress.stopped_reason = str(exc)
+    progress.estimated_completion_at = None
+    progress.updated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    write_progress(config.output_dir, progress)
 
 
 def build_export_plan(
@@ -740,22 +791,15 @@ def sleep_seconds(delay: float) -> None:
 
 
 def is_rate_limit_error(exc: Exception) -> bool:
-    text = str(exc).lower()
-    status_code = getattr(getattr(exc, "response", None), "status_code", None)
-    return status_code == 429 or "429" in text or "too many requests" in text
+    return status_code(exc) == 429
 
 
 def is_retryable_error(exc: Exception) -> bool:
-    status_code = getattr(getattr(exc, "response", None), "status_code", None)
-    if status_code in {403, 429} or (
-        isinstance(status_code, int) and 500 <= status_code <= 599
-    ):
-        return True
+    status = status_code(exc)
+    if status is not None:
+        return status == 429 or 500 <= status <= 599
     text = str(exc).lower()
     retry_markers = (
-        "403",
-        "429",
-        "too many requests",
         "timeout",
         "timed out",
         "connection",

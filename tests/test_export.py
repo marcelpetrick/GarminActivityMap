@@ -39,6 +39,7 @@ from garmin_export.cli import (
     validate_date_arg,
     write_json,
 )
+from garmin_export.request_errors import ExportStopped
 from garmin_export.year_range import (
     YearRangeConfig,
     default_start_year,
@@ -383,7 +384,7 @@ def test_throttle_before_detail_uses_delay_and_jitter(
     assert sleeps == [1.75]
 
 
-def test_export_records_failure_after_rate_limit_retries_are_exhausted(
+def test_export_stops_with_pending_work_after_rate_limit_retries_are_exhausted(
     tmp_path: Path,
 ) -> None:
     class RateLimitedClient(FakeClient):
@@ -404,14 +405,15 @@ def test_export_records_failure_after_rate_limit_retries_are_exhausted(
         max_retries=0,
     )
 
-    result = export_activities(RateLimitedClient(), config)
+    with pytest.raises(ExportStopped):
+        export_activities(RateLimitedClient(), config)
     state = json.loads((tmp_path / "export-state.json").read_text())
 
-    assert result.failed_count == 3
-    assert result.activity_count == 0
-    assert state["failures"] == 3
-    assert state["pending"] == 0
-    assert state["failed_activity_ids"] == ["101", "102", "103"]
+    assert state["failures"] == 0
+    assert state["pending"] == 3
+    assert state["failed_activity_ids"] == []
+    assert state["status"] == "stopped"
+    assert not (tmp_path / "manifest.json").exists()
 
 
 def test_is_rate_limit_error_checks_status_code_and_message() -> None:
@@ -516,7 +518,20 @@ def test_main_exports_with_built_client(
 
     monkeypatch.setattr(cli, "build_client", lambda: client)
 
-    exit_code = main(["--output-dir", str(tmp_path), "--page-size", "2"])
+    exit_code = main(
+        [
+            "--output-dir",
+            str(tmp_path),
+            "--page-size",
+            "2",
+            "--detail-delay",
+            "0",
+            "--detail-jitter",
+            "0",
+            "--request-interval",
+            "0",
+        ]
+    )
 
     output = capsys.readouterr().out
     assert exit_code == 0

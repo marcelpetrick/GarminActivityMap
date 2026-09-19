@@ -129,7 +129,8 @@ The exporter is intentionally conservative for detailed activity downloads:
 - Existing activity JSON files are skipped by default so interrupted exports can resume without repeating calls.
 - All Garmin requests are paced at one request per second by default; configure this with `--request-interval`.
 - Detail downloads can add an extra `--detail-delay` plus random `--detail-jitter`.
-- HTTP 403, 429, 5xx, timeout, and network failures use bounded exponential backoff controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`.
+- HTTP 5xx, timeout, and network failures use one bounded retry budget controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`. HTTP 429 respects `Retry-After` (including HTTP dates), or waits at least 60 seconds when no usable header is available; the server's delay is never shortened by `--backoff-max`.
+- HTTP 401/403 stops the run immediately. Exhausted HTTP 429 retries stop the entire year range, preserve remaining activities as pending, and record `status: stopped` plus the reason in `export-state.json`. Request pacing is shared across year boundaries.
 - `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities remain absent and are retried on the next run.
 
 Every run reports what it is doing without needing `--verbose`:
