@@ -487,10 +487,12 @@ def test_build_client_prompts_for_password_without_env_password(
             email: str,
             password: str,
             prompt_mfa: Any,
+            retry_attempts: int,
         ) -> None:
             captured["email"] = email
             captured["password"] = password
             captured["prompt_mfa"] = prompt_mfa
+            captured["retry_attempts"] = retry_attempts
 
     monkeypatch.setenv("GARMIN_EMAIL", "local@example.invalid")
     monkeypatch.setenv("GARMIN_PASSWORD", "must-not-be-used")
@@ -504,6 +506,7 @@ def test_build_client_prompts_for_password_without_env_password(
     assert client is not None
     assert captured["email"] == "local@example.invalid"
     assert captured["password"] == "typed-password"
+    assert captured["retry_attempts"] == 0
 
 
 def test_main_exports_with_built_client(

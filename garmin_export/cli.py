@@ -308,7 +308,12 @@ def build_client() -> GarminClient:
     password = getpass.getpass("Garmin password: ")
     return cast(
         GarminClient,
-        Garmin(email, password, prompt_mfa=lambda: input("Garmin MFA code: ")),
+        Garmin(
+            email,
+            password,
+            prompt_mfa=lambda: input("Garmin MFA code: "),
+            retry_attempts=0,
+        ),
     )
 
 
