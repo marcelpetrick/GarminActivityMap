@@ -37,28 +37,28 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.92`
+- Version: `0.0.93`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.92` with `python scripts/project_metrics.py`.
+Measured for version `0.0.93` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
 | Application (activity_map) | 18 | 3,965 | 3,433 | 30 | 253 |
-| Exporter (garmin_export) | 4 | 1,121 | 984 | 7 | 51 |
-| Tests | 21 | 4,362 | 3,540 | 9 | 239 |
+| Exporter (garmin_export) | 5 | 1,326 | 1,156 | 8 | 64 |
+| Tests | 24 | 4,950 | 4,022 | 16 | 289 |
 | Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **48** | **10,370** | **8,757** | **48** | **583** |
+| **Total** | **52** | **11,163** | **9,411** | **56** | **646** |
 
 | Property | Value |
 |---|---|
-| Test functions | 176 |
-| Test cases collected by pytest | 181 |
+| Test functions | 201 |
+| Test cases collected by pytest | 229 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -72,7 +72,7 @@ Largest modules:
 | Module | Lines |
 |---|---:|
 | `activity_map/widgets.py` | 1,335 |
-| `garmin_export/cli.py` | 839 |
+| `garmin_export/cli.py` | 966 |
 | `activity_map/loader.py` | 627 |
 | `activity_map/prepared_cache.py` | 417 |
 | `activity_map/render.py` | 310 |
