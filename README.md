@@ -100,7 +100,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Set `GARMIN_EMAIL` in your shell or in ignored local `.env`. The password is always entered manually at runtime and is not read from files or environment variables.
+Set `GARMIN_EMAIL` in your shell or in ignored local `.env`. When no usable saved session exists, the password is entered manually at runtime and is not read from files or environment variables.
 
 ```bash
 read -r GARMIN_EMAIL
@@ -113,7 +113,7 @@ export GARMIN_EMAIL
 python -m garmin_export
 ```
 
-By default, exported data is written under `data/garmin/activities/`, which is ignored by git. Authentication tokens are stored outside the repository by the `garminconnect` package unless `GARMIN_TOKENSTORE` is set. Do not point `GARMIN_TOKENSTORE` at a tracked repository path.
+By default, exported data is written under `data/garmin/activities/`, which is ignored by git. Authentication tokens are saved in `~/.garminconnect` and restored before prompting for credentials. Override that directory with `GARMIN_TOKENSTORE` in the shell or `.env`, or with `--tokenstore`; command-line settings take precedence. Do not point the token store at a tracked repository path.
 
 Useful options:
 
@@ -180,7 +180,7 @@ python -m garmin_export \
 ```
 
 To export full years from the current calendar year back through 2017 into
-separate ignored folders, enter the Garmin password once at startup and run:
+separate ignored folders, run (credentials are prompted only when needed):
 
 ```bash
 ./exportGarminYears.sh

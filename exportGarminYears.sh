@@ -19,7 +19,7 @@ printf '  Years        : current calendar year back to 2017 (override with --sta
 printf '  Pacing       : --detail-delay 2 --detail-jitter 2, verbose logging on\n'
 printf '  Resume       : already downloaded activities are skipped, only gaps are fetched\n'
 printf '  Extra flags  : %s\n' "${*:-none}"
-printf '  Credentials  : email from GARMIN_EMAIL or prompt, password and MFA typed at runtime\n\n'
+printf '  Credentials  : saved session first; email, password and MFA prompted when needed\n\n'
 
 python -m garmin_export.year_range \
   --end-year 2017 \

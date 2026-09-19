@@ -184,9 +184,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         backoff_max_seconds=args.backoff_max,
     )
 
-    client = build_client()
-    client.login(config.tokenstore)
     try:
+        client = authenticate_client(config.tokenstore)
         result = export_activities(client, config)
     except ExportStopped as exc:
         print(str(exc))
@@ -200,6 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    load_local_env(Path(".env"))
     parser = argparse.ArgumentParser(
         description="Export Garmin Connect activities to ignored local JSON files."
     )
@@ -237,8 +237,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--tokenstore",
-        default=os.getenv("GARMIN_TOKENSTORE"),
-        help="Optional garminconnect token directory. Defaults to the package default.",
+        default=default_tokenstore(),
+        help="Token directory. Default: GARMIN_TOKENSTORE or ~/.garminconnect.",
     )
     parser.add_argument(
         "--detail-delay",
@@ -316,7 +316,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def build_client() -> GarminClient:
+def default_tokenstore() -> str:
+    return os.getenv("GARMIN_TOKENSTORE") or str(Path.home() / ".garminconnect")
+
+
+def build_client(*, prompt_credentials: bool = True) -> GarminClient:
     try:
         from garminconnect import Garmin  # type: ignore[import-untyped]
     except ImportError as exc:
@@ -324,7 +328,8 @@ def build_client() -> GarminClient:
             "Missing dependency: run `python -m pip install -r requirements.txt`."
         ) from exc
 
-    load_local_env(Path(".env"))
+    if not prompt_credentials:
+        return cast(GarminClient, Garmin(retry_attempts=0))
     email = os.getenv("GARMIN_EMAIL") or input("Garmin email: ")
     password = getpass.getpass("Garmin password: ")
     return cast(
@@ -336,6 +341,32 @@ def build_client() -> GarminClient:
             retry_attempts=0,
         ),
     )
+
+
+def authenticate_client(tokenstore: str | None) -> GarminClient:
+    client = build_client(prompt_credentials=False)
+    from garminconnect import GarminConnectAuthenticationError
+
+    try:
+        login_with_stop(client, tokenstore)
+        return client
+    except GarminConnectAuthenticationError:
+        # Missing, unreadable or rejected cached credentials require user login.
+        client = build_client()
+        login_with_stop(client, tokenstore)
+        return client
+
+
+def login_with_stop(client: GarminClient, tokenstore: str | None) -> None:
+    try:
+        client.login(tokenstore)
+    except Exception as exc:
+        status = status_code(exc)
+        if status in {403, 429}:
+            raise ExportStopped(
+                f"Stopped login after HTTP {status}; try again later."
+            ) from exc
+        raise
 
 
 def export_activities(

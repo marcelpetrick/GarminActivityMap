@@ -145,7 +145,9 @@ def test_cli_returns_failure_when_listing_is_denied(
             raise HttpFailure(403)
 
     module = year_range if use_year_range else cli
-    monkeypatch.setattr(module, "build_client", DeniedClient)
+    monkeypatch.setattr(
+        module, "authenticate_client", lambda tokenstore: DeniedClient()
+    )
     args = (
         ["--output-root", str(tmp_path), "--start-year", "2025", "--end-year", "2025"]
         if use_year_range

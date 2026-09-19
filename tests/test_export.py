@@ -526,7 +526,7 @@ def test_main_exports_with_built_client(
 ) -> None:
     client = FakeClient()
 
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "authenticate_client", lambda tokenstore: client)
 
     exit_code = main(
         [
@@ -570,7 +570,7 @@ def test_main_returns_failure_when_an_activity_could_not_be_exported(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     client = FakeClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "authenticate_client", lambda tokenstore: client)
     monkeypatch.setattr(
         cli, "export_activities", lambda client, config: failed_export_result(tmp_path)
     )
@@ -582,7 +582,7 @@ def test_year_range_main_returns_failure_when_any_year_is_incomplete(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     client = FakeClient()
-    monkeypatch.setattr(year_range, "build_client", lambda: client)
+    monkeypatch.setattr(year_range, "authenticate_client", lambda tokenstore: client)
     monkeypatch.setattr(
         year_range,
         "export_year_range",

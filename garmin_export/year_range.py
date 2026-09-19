@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -15,8 +14,10 @@ from .cli import (
     ExportResult,
     GarminClient,
     RequestExecutor,
-    build_client,
+    authenticate_client,
+    default_tokenstore,
     export_activities,
+    load_local_env,
     validate_date_arg,
     verbose_log,
 )
@@ -48,9 +49,8 @@ class YearRangeConfig:
 
 def main(argv: Sequence[str] | None = None) -> int:
     config = parse_args(argv)
-    client = build_client()
-    client.login(config.tokenstore)
     try:
+        client = authenticate_client(config.tokenstore)
         results = export_year_range(client, config)
     except ExportStopped as exc:
         print(str(exc))
@@ -99,6 +99,7 @@ def year_range_label(result: ExportResult) -> str:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
+    load_local_env(Path(".env"))
     parser = argparse.ArgumentParser(
         description=(
             "Export Garmin activities year by year with one login and resumable "
@@ -146,8 +147,8 @@ def parse_args(argv: Sequence[str] | None = None) -> YearRangeConfig:
     )
     parser.add_argument(
         "--tokenstore",
-        default=os.getenv("GARMIN_TOKENSTORE"),
-        help="Optional garminconnect token directory. Defaults to the package default.",
+        default=default_tokenstore(),
+        help="Token directory. Default: GARMIN_TOKENSTORE or ~/.garminconnect.",
     )
     parser.add_argument(
         "--detail-delay",
