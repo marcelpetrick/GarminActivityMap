@@ -228,8 +228,11 @@ overwriting already downloaded activity payloads. Each year-level
 manifest JSON files are written through a temporary file and atomically moved
 into place, which avoids keeping partial files after an interrupted write.
 Date-based exports are split into calendar-month Garmin queries and then
-deduplicated by activity id, which avoids relying on a single full-year query
-that may be capped by Garmin.
+deduplicated by activity id. Each window is explicitly paginated using
+`--page-size`, with pacing and retries applied to each HTTP page request.
+Pagination continues to an empty page even if Garmin caps the requested page
+size; retries repeat only the failed page. Repeated pages or an excessive page
+count stop the export instead of looping indefinitely.
 
 ## Visualize
 

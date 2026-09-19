@@ -201,3 +201,86 @@ def test_request_spacing_is_preserved_between_years(
     )
     year_range.export_year_range(EmptyClient(), config)
     assert calls == list(range(24))
+
+
+def test_date_pages_are_paced_and_retry_only_the_failed_page(
+    tmp_path: Path, clock: list[float]
+) -> None:
+    import garminconnect
+
+    client = garminconnect.Garmin(retry_attempts=0)
+    calls: list[tuple[int, float]] = []
+
+    def transport(path: str, *, params: dict[str, str]) -> list[dict[str, int]]:
+        assert path == "/activitylist-service/activities/search/activities"
+        assert params["limit"] == "100"
+        assert params["startDate"] == "2025-01-01"
+        assert params["endDate"] == "2025-01-31"
+        assert params["activityType"] == "running"
+        offset = int(params["start"])
+        calls.append((offset, clock[0]))
+        if len(calls) == 2:
+            raise TimeoutError("network timeout")
+        # Exercise a server cap below the requested page size.
+        return (
+            [{"activityId": offset + i + 1} for i in range(20)] if offset < 40 else []
+        )
+
+    client.client.connectapi = transport
+    config = replace(
+        dated_config(tmp_path),
+        page_size=100,
+        end_date="2025-01-31",
+        activity_type="running",
+        request_interval_seconds=1,
+    )
+    rows = cli.collect_activities_by_date(client, config)
+    assert [row["activityId"] for row in rows] == list(range(1, 41))
+    assert calls == [(0, 0), (20, 1), (20, 3), (40, 4)]
+
+
+def test_open_ended_date_query_uses_explicit_pages(tmp_path: Path) -> None:
+    calls: list[dict[str, str]] = []
+
+    class Client(FakeClient):
+        def connectapi(self, path: str, *, params: dict[str, str]) -> Any:
+            calls.append(params)
+            return [{"activityId": 1}] if params["start"] == "0" else []
+
+    config = replace(dated_config(tmp_path), end_date=None, page_size=50)
+    assert cli.collect_activities_by_date(Client(), config) == [{"activityId": 1}]
+    assert [params["start"] for params in calls] == ["0", "1"]
+    assert all(params["limit"] == "50" for params in calls)
+    assert all(
+        "endDate" not in params and "activityType" not in params for params in calls
+    )
+
+
+@pytest.mark.parametrize("payload", [None, {}, [None], ["invalid"]])
+def test_invalid_page_payload_is_rejected(tmp_path: Path, payload: Any) -> None:
+    class Client(FakeClient):
+        def connectapi(self, path: str, *, params: dict[str, str]) -> Any:
+            return payload
+
+    with pytest.raises(ValueError, match="list of activity objects"):
+        cli.collect_activities_by_date(Client(), dated_config(tmp_path))
+
+
+def test_repeated_pages_stop_instead_of_looping() -> None:
+    offsets: list[int] = []
+
+    def repeated(offset: int) -> list[dict[str, Any]]:
+        offsets.append(offset)
+        return [{"activityId": 1}]
+
+    with pytest.raises(ValueError, match="no progress"):
+        cli.collect_activity_pages(repeated, None, "activities")
+    assert offsets == [0, 1]
+
+
+def test_endless_unique_pages_are_bounded(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "MAX_ACTIVITY_PAGES", 2)
+    with pytest.raises(ValueError, match="exceeded 2 pages"):
+        cli.collect_activity_pages(
+            lambda offset: [{"activityId": offset + 1}], None, "activities"
+        )

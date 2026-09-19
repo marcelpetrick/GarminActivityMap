@@ -61,6 +61,14 @@ class FakeClient:
     def login(self, tokenstore: str | None = None) -> None:
         return None
 
+    def connectapi(self, path: str, *, params: dict[str, str]) -> Any:
+        assert path == cli.ACTIVITY_LIST_PATH
+        rows = self.get_activities_by_date(
+            params["startDate"], params.get("endDate"), params.get("activityType")
+        )
+        start, limit = int(params["start"]), int(params["limit"])
+        return rows[start : start + limit]
+
     def get_activities(
         self, start: int = 0, limit: int = 20, activitytype: str | None = None
     ) -> list[dict[str, Any]]:
@@ -155,7 +163,7 @@ def test_collect_activities_uses_date_range_when_start_date_is_set() -> None:
             "activityType": "cycling",
         }
     ]
-    assert client.date_calls == [("2026-05-13", "2026-05-31", "cycling")]
+    assert client.date_calls == [("2026-05-13", "2026-05-31", "cycling")] * 2
 
 
 def test_month_ranges_split_date_export_into_calendar_windows() -> None:
@@ -199,6 +207,8 @@ def test_collect_activities_by_date_deduplicates_chunk_boundaries() -> None:
     assert [activity["activityId"] for activity in activities] == [1, 2, 3]
     assert client.date_calls == [
         ("2025-01-01", "2025-01-31", None),
+        ("2025-01-01", "2025-01-31", None),
+        ("2025-02-01", "2025-02-28", None),
         ("2025-02-01", "2025-02-28", None),
     ]
 

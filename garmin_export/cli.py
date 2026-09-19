@@ -25,6 +25,8 @@ DEFAULT_BACKOFF_INITIAL_SECONDS = 2.0
 DEFAULT_BACKOFF_MAX_SECONDS = 60.0
 PROGRESS_REPORT_INTERVAL = 10
 DETAIL_KEYS = frozenset({"activity", "details"})
+ACTIVITY_LIST_PATH = "/activitylist-service/activities/search/activities"
+MAX_ACTIVITY_PAGES = 10_000
 T = TypeVar("T")
 
 
@@ -35,13 +37,7 @@ class GarminClient(Protocol):
         self, start: int = 0, limit: int = 20, activitytype: str | None = None
     ) -> list[dict[str, Any]]: ...
 
-    def get_activities_by_date(
-        self,
-        startdate: str,
-        enddate: str | None = None,
-        activitytype: str | None = None,
-        sortorder: str | None = None,
-    ) -> list[dict[str, Any]]: ...
+    def connectapi(self, path: str, *, params: dict[str, str]) -> Any: ...
 
     def get_activity(self, activity_id: str) -> dict[str, Any]: ...
 
@@ -665,37 +661,30 @@ def collect_activities_by_date(
     if config.start_date is None:
         return []
 
-    if config.end_date is None:
-        request_executor = executor or RequestExecutor(
-            config,
-            ExportProgress("", "", failed_activity_ids=[]),
-        )
-        return request_executor.call(
-            partial(
-                client.get_activities_by_date,
-                startdate=config.start_date,
-                activitytype=config.activity_type,
-            ),
-            f"activities from {config.start_date}",
-        )
-
     request_executor = executor or RequestExecutor(
         config,
         ExportProgress("", "", failed_activity_ids=[]),
     )
     activities_by_id: dict[str, dict[str, Any]] = {}
-    for start_date, end_date in month_ranges(config.start_date, config.end_date):
+    windows = (
+        month_ranges(config.start_date, config.end_date)
+        if config.end_date is not None
+        else ((config.start_date, None),)
+    )
+    for start_date, end_date in windows:
         verbose_log(
             config.verbose,
             f"Collecting date window {start_date} to {end_date}",
         )
-        activities = request_executor.call(
+        activities = collect_activity_pages(
             partial(
-                client.get_activities_by_date,
-                startdate=start_date,
-                enddate=end_date,
-                activitytype=config.activity_type,
+                fetch_date_page,
+                client,
+                config,
+                start_date,
+                end_date,
             ),
+            request_executor,
             f"activities {start_date} to {end_date}",
         )
         verbose_log(
@@ -706,6 +695,54 @@ def collect_activities_by_date(
             activities_by_id.setdefault(extract_activity_id(activity), activity)
 
     return list(activities_by_id.values())
+
+
+def fetch_date_page(
+    client: GarminClient,
+    config: ExportConfig,
+    start_date: str,
+    end_date: str | None,
+    offset: int,
+) -> list[dict[str, Any]]:
+    params = {
+        "startDate": start_date,
+        "start": str(offset),
+        "limit": str(config.page_size),
+    }
+    if end_date is not None:
+        params["endDate"] = end_date
+    if config.activity_type is not None:
+        params["activityType"] = config.activity_type
+    page = client.connectapi(ACTIVITY_LIST_PATH, params=params)
+    if not isinstance(page, list) or any(not isinstance(row, dict) for row in page):
+        raise ValueError("Garmin activity page must be a list of activity objects")
+    return page
+
+
+def collect_activity_pages(
+    fetch_page: Callable[[int], list[dict[str, Any]]],
+    executor: RequestExecutor | None,
+    description: str,
+) -> list[dict[str, Any]]:
+    offset = 0
+    activities: dict[str, dict[str, Any]] = {}
+    for _ in range(MAX_ACTIVITY_PAGES):
+        operation = partial(fetch_page, offset)
+        page = (
+            operation()
+            if executor is None
+            else executor.call(operation, f"{description} at offset {offset}")
+        )
+        if not page:
+            return list(activities.values())
+        previous_count = len(activities)
+        for activity in page:
+            activities.setdefault(extract_activity_id(activity), activity)
+        if len(activities) == previous_count:
+            raise ValueError("Garmin pagination made no progress; stopping export")
+        # Advance by the actual page length: Garmin may cap the requested limit.
+        offset += len(page)
+    raise ValueError(f"Garmin pagination exceeded {MAX_ACTIVITY_PAGES} pages")
 
 
 def month_ranges(start_date: str, end_date: str) -> tuple[tuple[str, str], ...]:
@@ -740,30 +777,11 @@ def iter_activities(
     activity_type: str | None,
     executor: RequestExecutor | None = None,
 ) -> list[dict[str, Any]]:
-    start = 0
-    activities: list[dict[str, Any]] = []
-
-    while True:
-        if executor is None:
-            page = client.get_activities(
-                start=start, limit=page_size, activitytype=activity_type
-            )
-        else:
-            page = executor.call(
-                partial(
-                    client.get_activities,
-                    start=start,
-                    limit=page_size,
-                    activitytype=activity_type,
-                ),
-                f"activities page at offset {start}",
-            )
-        if not page:
-            return activities
-        activities.extend(page)
-        if len(page) < page_size:
-            return activities
-        start += len(page)
+    return collect_activity_pages(
+        partial(client.get_activities, limit=page_size, activitytype=activity_type),
+        executor,
+        "activities page",
+    )
 
 
 def extract_activity_id(activity: dict[str, Any]) -> str:
