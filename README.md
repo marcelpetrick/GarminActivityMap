@@ -131,7 +131,7 @@ The exporter is intentionally conservative for detailed activity downloads:
 - Detail downloads can add an extra `--detail-delay` plus random `--detail-jitter`.
 - HTTP 5xx, timeout, and network failures use one bounded retry budget controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`. HTTP 429 respects `Retry-After` (including HTTP dates), or waits at least 60 seconds when no usable header is available; the server's delay is never shortened by `--backoff-max`.
 - HTTP 401/403 stops the run immediately. Exhausted HTTP 429 retries stop the entire year range, preserve remaining activities as pending, and record `status: stopped` plus the reason in `export-state.json`. Request pacing is shared across year boundaries.
-- `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities remain absent and are retried on the next run.
+- `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities are retried on the next run; successful payload components are checkpointed so they do not need another download.
 
 Every run reports what it is doing without needing `--verbose`:
 
@@ -227,6 +227,11 @@ overwriting already downloaded activity payloads. Each year-level
 `manifest.json` is regenerated to summarize the latest run. Activity and
 manifest JSON files are written through a temporary file and atomically moved
 into place, which avoids keeping partial files after an interrupted write.
+Successful activity and detail responses are independently checkpointed in
+`.partial/<activity-id>.part` within each year folder. Reruns fetch only missing
+components, then publish the complete activity JSON and remove its checkpoint.
+The map ignores `.part` files. Invalid response types are recorded as failures;
+`--no-skip-existing` on the single-export CLI deliberately ignores checkpoints.
 Date-based exports are split into calendar-month Garmin queries and then
 deduplicated by activity id. Each window is explicitly paginated using
 `--page-size`, with pacing and retries applied to each HTTP page request.

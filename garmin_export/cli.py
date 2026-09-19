@@ -432,24 +432,9 @@ def export_activities(
         verbose_log(config.verbose, f"{progress_label} export activity {activity_id}")
 
         if config.include_details:
-            throttle_before_detail(config)
-            verbose_log(
-                config.verbose,
-                f"{progress_label} fetch activity payload {activity_id}",
-            )
             try:
-                payload["activity"] = executor.call(
-                    partial(client.get_activity, activity_id),
-                    f"activity {activity_id}",
-                )
-                throttle_before_detail(config)
-                verbose_log(
-                    config.verbose,
-                    f"{progress_label} fetch activity details {activity_id}",
-                )
-                payload["details"] = executor.call(
-                    partial(client.get_activity_details, activity_id),
-                    f"activity details {activity_id}",
+                payload = complete_activity_payload(
+                    client, config, executor, activity, output_file
                 )
             except ExportStopped as exc:
                 record_stopped_export(config, progress, exc)
@@ -467,6 +452,8 @@ def export_activities(
                 continue
 
         write_json(output_file, payload)
+        if config.include_details:
+            checkpoint_path(config, activity_id).unlink(missing_ok=True)
         verbose_log(
             config.verbose,
             f"{progress_label} wrote {relative_file.as_posix()}",
@@ -506,6 +493,45 @@ def export_activities(
     for line in describe_result(manifest, monotonic_seconds() - started_at):
         print(line)
     return manifest
+
+
+def checkpoint_path(config: ExportConfig, activity_id: str) -> Path:
+    # .part files are excluded from the map loader's recursive *.json scan.
+    return config.output_dir / ".partial" / f"{activity_id}.part"
+
+
+def complete_activity_payload(
+    client: GarminClient,
+    config: ExportConfig,
+    executor: RequestExecutor,
+    activity: dict[str, Any],
+    output_file: Path,
+) -> dict[str, Any]:
+    activity_id = extract_activity_id(activity)
+    checkpoint = checkpoint_path(config, activity_id)
+    payload: dict[str, Any] = {"summary": activity}
+    if config.skip_existing:
+        for source in (output_file, checkpoint):
+            saved = load_export_payload(source)
+            for key in DETAIL_KEYS:
+                if isinstance(saved.get(key), dict):
+                    payload[key] = saved[key]
+
+    for key, fetch in (
+        ("activity", client.get_activity),
+        ("details", client.get_activity_details),
+    ):
+        if key in payload:
+            continue
+        throttle_before_detail(config)
+        verbose_log(config.verbose, f"Fetch {key} payload for activity {activity_id}")
+        component = executor.call(partial(fetch, activity_id), f"{key} {activity_id}")
+        if not isinstance(component, dict):
+            raise ValueError(f"Invalid {key} payload for activity {activity_id}")
+        payload[key] = component
+        checkpoint.parent.mkdir(exist_ok=True)
+        write_json(checkpoint, payload)
+    return payload
 
 
 def record_stopped_export(
@@ -561,14 +587,17 @@ def is_complete_export(path: Path, include_details: bool) -> bool:
 
 
 def has_detail_payload(path: Path) -> bool:
+    payload = load_export_payload(path)
+    return all(isinstance(payload.get(key), dict) for key in DETAIL_KEYS)
+
+
+def load_export_payload(path: Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as file:
             payload = json.load(file)
     except OSError, ValueError:
-        return False
-    return isinstance(payload, dict) and all(
-        isinstance(payload.get(key), dict) for key in DETAIL_KEYS
-    )
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
