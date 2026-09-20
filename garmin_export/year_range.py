@@ -220,9 +220,17 @@ def export_year_range(
     config: YearRangeConfig,
 ) -> list[ExportResult]:
     results: list[ExportResult] = []
-    years = years_inclusive(config.start_year, config.end_year)
+    today = date.today()
+    years = tuple(
+        year
+        for year in years_inclusive(config.start_year, config.end_year)
+        if year <= today.year
+    )
+    if not years:
+        print(f"No years to export on or before {today.isoformat()}.")
+        return results
     executor = RequestExecutor(
-        export_config_for_year(config, years[0]), ExportProgress("", "")
+        export_config_for_year(config, years[0], today), ExportProgress("", "")
     )
     print(
         f"Garmin year export: {len(years)} years "
@@ -236,7 +244,7 @@ def export_year_range(
         print(f"Year {year} ({position}/{len(years)})")
         verbose_log(config.verbose, f"Exporting Garmin activities for {year}")
         result = export_activities(
-            client, export_config_for_year(config, year), executor
+            client, export_config_for_year(config, year, today), executor
         )
         results.append(result)
         verbose_log(
@@ -250,9 +258,14 @@ def export_year_range(
     return results
 
 
-def export_config_for_year(config: YearRangeConfig, year: int) -> ExportConfig:
+def export_config_for_year(
+    config: YearRangeConfig, year: int, today: date | None = None
+) -> ExportConfig:
+    today = today or date.today()
+    if year > today.year:
+        raise ValueError("Cannot export a future year")
     start_date = f"{year}-01-01"
-    end_date = f"{year}-12-31"
+    end_date = min(date(year, 12, 31), today).isoformat()
     validate_date_arg(argparse.ArgumentParser(), "--start-date", start_date)
     validate_date_arg(argparse.ArgumentParser(), "--end-date", end_date)
     return ExportConfig(

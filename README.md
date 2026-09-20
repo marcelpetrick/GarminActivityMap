@@ -37,28 +37,28 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.93`
+- Version: `0.0.94`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.93` with `python scripts/project_metrics.py`.
+Measured for version `0.0.94` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
 | Application (activity_map) | 18 | 3,965 | 3,433 | 30 | 253 |
-| Exporter (garmin_export) | 5 | 1,326 | 1,156 | 8 | 64 |
-| Tests | 24 | 4,950 | 4,022 | 16 | 289 |
+| Exporter (garmin_export) | 5 | 1,339 | 1,169 | 8 | 64 |
+| Tests | 25 | 5,027 | 4,086 | 17 | 294 |
 | Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **52** | **11,163** | **9,411** | **56** | **646** |
+| **Total** | **53** | **11,253** | **9,488** | **57** | **651** |
 
 | Property | Value |
 |---|---|
-| Test functions | 201 |
-| Test cases collected by pytest | 229 |
+| Test functions | 205 |
+| Test cases collected by pytest | 237 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -192,7 +192,9 @@ exporter flags at the end. For example, `./exportGarminYears.sh --no-details`
 exports summaries only.
 
 The first year is the current calendar year, so the running year's activities
-are always included; `--start-year` and `--end-year` override the range. If the
+are always included; `--start-year` and `--end-year` override the range. The
+current year's query ends on today's local date, including today; future months
+and future years are skipped, while historical years retain their full range. If the
 map is missing recent activities, check that a folder for the current year
 exists under `data/garmin/` and that its export completed - an interrupted run
 leaves `export-state.json` with a non-zero `pending` count and writes no
