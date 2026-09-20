@@ -13,6 +13,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Protocol, TypeVar, cast
 
+from .estimates import DownloadEstimate, expected_request_wait
 from .request_errors import ExportStopped, retry_after_seconds, status_code
 
 DEFAULT_OUTPUT_DIR = Path("data/garmin/activities")
@@ -90,6 +91,7 @@ class ExportPlan:
     first_activity_date: str | None
     last_activity_date: str | None
     undated_count: int
+    detail_requests: int = 0
 
 
 @dataclass
@@ -105,6 +107,7 @@ class ExportProgress:
     failed_activity_ids: list[str] | None = None
     status: str = "collecting"
     stopped_reason: str | None = None
+    download_estimate: DownloadEstimate | None = None
 
 
 class RequestExecutor:
@@ -405,6 +408,15 @@ def export_activities(
     write_progress(config.output_dir, progress)
     verbose_log(config.verbose, f"Found {activity_total} activities")
     plan = build_export_plan(activities, config)
+    progress.download_estimate = DownloadEstimate(
+        plan.detail_requests,
+        expected_request_wait(
+            config.request_interval_seconds,
+            config.detail_delay_seconds,
+            config.detail_jitter_seconds,
+        ),
+    )
+    update_progress(config.output_dir, progress)
     for line in describe_plan(plan, config):
         print(line)
 
@@ -509,28 +521,53 @@ def complete_activity_payload(
 ) -> dict[str, Any]:
     activity_id = extract_activity_id(activity)
     checkpoint = checkpoint_path(config, activity_id)
-    payload: dict[str, Any] = {"summary": activity}
+    payload: dict[str, Any] = {
+        "summary": activity,
+        **saved_detail_components(config, output_file),
+    }
+    remaining = len(DETAIL_KEYS - payload.keys())
+    estimate = executor.progress.download_estimate
+    try:
+        for key, fetch in (
+            ("activity", client.get_activity),
+            ("details", client.get_activity_details),
+        ):
+            if key in payload:
+                continue
+            started = monotonic_seconds()
+            throttle_before_detail(config)
+            verbose_log(
+                config.verbose, f"Fetch {key} payload for activity {activity_id}"
+            )
+            component = executor.call(
+                partial(fetch, activity_id), f"{key} {activity_id}"
+            )
+            if not isinstance(component, dict):
+                raise ValueError(f"Invalid {key} payload for activity {activity_id}")
+            payload[key] = component
+            checkpoint.parent.mkdir(exist_ok=True)
+            write_json(checkpoint, payload)
+            remaining -= 1
+            if estimate is not None:
+                estimate.record_completed(monotonic_seconds() - started)
+                update_progress(config.output_dir, executor.progress)
+    except ExportStopped:
+        raise
+    except Exception:
+        if estimate is not None:
+            estimate.discard_requests(remaining)
+        raise
+    return payload
+
+
+def saved_detail_components(config: ExportConfig, output_file: Path) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
     if config.skip_existing:
-        for source in (output_file, checkpoint):
+        for source in (output_file, checkpoint_path(config, output_file.stem)):
             saved = load_export_payload(source)
             for key in DETAIL_KEYS:
                 if isinstance(saved.get(key), dict):
                     payload[key] = saved[key]
-
-    for key, fetch in (
-        ("activity", client.get_activity),
-        ("details", client.get_activity_details),
-    ):
-        if key in payload:
-            continue
-        throttle_before_detail(config)
-        verbose_log(config.verbose, f"Fetch {key} payload for activity {activity_id}")
-        component = executor.call(partial(fetch, activity_id), f"{key} {activity_id}")
-        if not isinstance(component, dict):
-            raise ValueError(f"Invalid {key} payload for activity {activity_id}")
-        payload[key] = component
-        checkpoint.parent.mkdir(exist_ok=True)
-        write_json(checkpoint, payload)
     return payload
 
 
@@ -552,6 +589,7 @@ def build_export_plan(
     summary_only = 0
     dates: list[str] = []
     undated_count = 0
+    detail_requests = 0
     for activity in activities:
         activity_date = activity_start_date(activity)
         if activity_date is None:
@@ -561,12 +599,16 @@ def build_export_plan(
         output_file = (
             config.output_dir / "activities" / f"{extract_activity_id(activity)}.json"
         )
-        if not config.skip_existing:
-            continue
-        if is_complete_export(output_file, config.include_details):
+        if config.skip_existing and is_complete_export(
+            output_file, config.include_details
+        ):
             already_present += 1
-        elif output_file.exists():
+            continue
+        if config.skip_existing and output_file.exists():
             summary_only += 1
+        if config.include_details:
+            saved = saved_detail_components(config, output_file)
+            detail_requests += len(DETAIL_KEYS - saved.keys())
     return ExportPlan(
         total=len(activities),
         already_present=already_present,
@@ -575,6 +617,7 @@ def build_export_plan(
         first_activity_date=min(dates) if dates else None,
         last_activity_date=max(dates) if dates else None,
         undated_count=undated_count,
+        detail_requests=detail_requests,
     )
 
 
@@ -616,10 +659,13 @@ def describe_plan(plan: ExportPlan, config: ExportConfig) -> tuple[str, ...]:
         )
     if plan.undated_count:
         lines.append(f"  Without a date    : {plan.undated_count}")
-    if plan.missing:
+    if plan.detail_requests:
         lines.append(
-            f"  Estimated runtime : {format_duration(estimated_seconds(plan, config))}"
+            f"  Estimated pacing  : {format_duration(estimated_seconds(plan, config))} "
+            "(network and disk time additional)"
         )
+    elif plan.missing:
+        lines.append("  Remaining work    : local file writes only")
     else:
         lines.append("  Nothing to download; the local export is already complete.")
     return tuple(lines)
@@ -652,13 +698,11 @@ def covered_range_label(plan: ExportPlan) -> str:
 
 
 def estimated_seconds(plan: ExportPlan, config: ExportConfig) -> float:
-    requests_per_activity = 2 if config.include_details else 0
-    per_activity = requests_per_activity * (
-        config.request_interval_seconds
-        + config.detail_delay_seconds
-        + config.detail_jitter_seconds / 2.0
+    return plan.detail_requests * expected_request_wait(
+        config.request_interval_seconds,
+        config.detail_delay_seconds,
+        config.detail_jitter_seconds,
     )
-    return plan.missing * max(per_activity, config.request_interval_seconds)
 
 
 def format_duration(seconds: float) -> str:
@@ -894,19 +938,23 @@ def monotonic_seconds() -> float:
 
 
 def update_progress(output_dir: Path, progress: ExportProgress) -> None:
-    progress.updated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
-    processed = progress.completed + progress.failures
-    if processed and progress.pending:
-        started = datetime.fromisoformat(progress.started_at)
-        elapsed = max((datetime.now(UTC) - started).total_seconds(), 0.0)
-        remaining_seconds = elapsed / processed * progress.pending
+    now = datetime.now(UTC)
+    progress.updated_at = now.replace(microsecond=0).isoformat()
+    estimate = progress.download_estimate
+    if (
+        estimate is not None
+        and estimate.remaining_requests
+        and progress.status == "downloading"
+    ):
         progress.estimated_completion_at = (
-            (datetime.now(UTC) + timedelta(seconds=remaining_seconds))
+            (now + timedelta(seconds=estimate.remaining_seconds()))
             .replace(microsecond=0)
             .isoformat()
         )
-    elif not progress.pending:
+    elif not progress.pending and progress.status in {"complete", "incomplete"}:
         progress.estimated_completion_at = progress.updated_at
+    else:
+        progress.estimated_completion_at = None
     write_progress(output_dir, progress)
 
 

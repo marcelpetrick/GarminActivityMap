@@ -37,28 +37,28 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.94`
+- Version: `0.0.95`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.94` with `python scripts/project_metrics.py`.
+Measured for version `0.0.95` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
 | Application (activity_map) | 18 | 3,965 | 3,433 | 30 | 253 |
-| Exporter (garmin_export) | 5 | 1,339 | 1,169 | 8 | 64 |
-| Tests | 25 | 5,027 | 4,086 | 17 | 294 |
+| Exporter (garmin_export) | 6 | 1,425 | 1,246 | 9 | 69 |
+| Tests | 26 | 5,240 | 4,269 | 20 | 309 |
 | Benchmarks | 2 | 503 | 443 | 1 | 17 |
 | Tooling scripts | 3 | 419 | 357 | 1 | 23 |
-| **Total** | **53** | **11,253** | **9,488** | **57** | **651** |
+| **Total** | **55** | **11,552** | **9,748** | **61** | **671** |
 
 | Property | Value |
 |---|---|
-| Test functions | 205 |
-| Test cases collected by pytest | 237 |
+| Test functions | 211 |
+| Test cases collected by pytest | 253 |
 | Coverage threshold | 95% enforced by the pipeline |
 | Quality gates | 12 in `localPipeline.sh` |
 | Runtime dependencies | 5, all pinned exactly |
@@ -72,7 +72,7 @@ Largest modules:
 | Module | Lines |
 |---|---:|
 | `activity_map/widgets.py` | 1,335 |
-| `garmin_export/cli.py` | 966 |
+| `garmin_export/cli.py` | 1,014 |
 | `activity_map/loader.py` | 627 |
 | `activity_map/prepared_cache.py` | 417 |
 | `activity_map/render.py` | 310 |
@@ -132,6 +132,7 @@ The exporter is intentionally conservative for detailed activity downloads:
 - HTTP 5xx, timeout, and network failures use one bounded retry budget controlled by `--max-retries`, `--backoff-initial`, and `--backoff-max`. HTTP 429 respects `Retry-After` (including HTTP dates), or waits at least 60 seconds when no usable header is available; the server's delay is never shortened by `--backoff-max`.
 - HTTP 401/403 stops the run immediately. Exhausted HTTP 429 retries stop the entire year range, preserve remaining activities as pending, and record `status: stopped` plus the reason in `export-state.json`. Request pacing is shared across year boundaries.
 - `export-state.json` is atomically updated with completed, pending, failed, retry, and estimated-completion data. Failed activities are retried on the next run; successful payload components are checkpointed so they do not need another download.
+- The initial pacing estimate counts only missing payload requests and accounts for overlapping request intervals and detail waits, including jitter. Network and disk time are additional. During downloads, the completion estimate uses measured request durations (including waits, successful retries, and checkpoint writes); listing and skipped-file processing do not affect the average. The state file records the remaining request count separately from pending activity entries.
 
 Every run reports what it is doing without needing `--verbose`:
 
@@ -142,8 +143,8 @@ Export plan for 2025-01-01 to 2025-12-31
   Activities listed : 312 from 2025-01-02 to 2025-12-30
   Already on disk   : 300 (skipped)
   Still to download : 12
-  Estimated runtime : 1m 24s
-  12/312 activities processed; 10 downloaded, 300 already present, 0 failed; estimated completion 2026-08-14T18:22:41+00:00
+  Estimated pacing  : 1m 36s (network and disk time additional)
+  310/312 activities processed; 10 downloaded, 300 already present, 0 failed; estimated completion 2026-08-14T18:22:41+00:00
 Export finished for data/garmin/activities-2025 in 1m 31s
   Downloaded        : 12
   Already present   : 300
