@@ -13,6 +13,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Protocol, TypeVar, cast
 
+from .authentication import stop_on_auth_block
 from .estimates import DownloadEstimate, expected_request_wait
 from .request_errors import ExportStopped, retry_after_seconds, status_code
 
@@ -362,7 +363,8 @@ def authenticate_client(tokenstore: str | None) -> GarminClient:
 
 def login_with_stop(client: GarminClient, tokenstore: str | None) -> None:
     try:
-        client.login(tokenstore)
+        with stop_on_auth_block():
+            client.login(tokenstore)
     except Exception as exc:
         status = status_code(exc)
         if status in {403, 429}:
