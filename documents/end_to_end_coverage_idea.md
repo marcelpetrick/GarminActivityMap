@@ -4,6 +4,8 @@ This note captures how `pytest-qt` should be used to extend coverage from widget
 
 `pytest-qt==4.5.0` is the GUI-testing plugin version. It is not a Qt runtime version. The application currently uses PyQt/Qt 6, while `pytest-qt` provides the `qtbot` fixture and helpers for driving Qt widgets in tests.
 
+Status: the first work package exists as `tests/test_gui_e2e.py`, with shared fixtures in `tests/gui_helpers.py`. The application has no tilt state (see [speed_improvements20260623.md](speed_improvements20260623.md)), so the scenarios below cover pan and zoom only.
+
 ## Goal
 
 Add repeatable end-to-end coverage for the desktop workflow that matters most:
@@ -11,7 +13,7 @@ Add repeatable end-to-end coverage for the desktop workflow that matters most:
 1. A user starts the application.
 2. A Garmin export directory is selected.
 3. Tracks appear incrementally while the archive is still loading.
-4. The user pans, zooms, tilts, toggles display options, and reloads data.
+4. The user pans, zooms, toggles display options, and reloads data.
 5. The UI stays responsive and preserves expected state.
 
 These tests should verify behavior and data flow, not pixel-perfect rendering. Pixel-perfect assertions are brittle on different Qt, font, DPI, platform, and graphics backends.
@@ -63,7 +65,6 @@ Assertions:
 
 - Pan changes the viewport.
 - Zoom changes the viewport scale.
-- Tilt changes the rendered transform state where supported.
 - Visible-track selection still returns tracks after movement.
 - Repaint completes without exceptions.
 - The retained render cache is reused instead of rebuilding all geometry for every paint.
@@ -107,7 +108,7 @@ Scenario:
 
 1. Generate 1,000 synthetic tracks.
 2. Load them into the application.
-3. Pan, zoom, and tilt the map.
+3. Pan and zoom the map.
 4. Measure frame preparation and paint-related counters.
 
 Assertions suitable for CI:
@@ -126,7 +127,7 @@ Use `pytest-qt` for in-process UI tests:
 ```python
 def test_large_directory_load_shows_tracks_incrementally(qtbot, monkeypatch, tmp_path):
     directory = make_activity_directory(tmp_path, track_count=1000)
-    window = ActivityMapWindow()
+    window = MainWindow()
     qtbot.addWidget(window)
 
     monkeypatch.setattr(
@@ -135,7 +136,7 @@ def test_large_directory_load_shows_tracks_incrementally(qtbot, monkeypatch, tmp
         lambda *args, **kwargs: str(directory),
     )
 
-    qtbot.mouseClick(window.load_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.choose_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: window.visible_track_count > 0, timeout=5000)
     qtbot.waitUntil(lambda: window.total_track_count == 1000, timeout=30000)
@@ -161,7 +162,7 @@ Add shared helpers for:
 - creating large deterministic track directories;
 - launching the main window with temporary settings and disabled tiles;
 - waiting for loading completion or first-batch publication;
-- driving pan, zoom, and tilt events;
+- driving pan and zoom events;
 - collecting render counters or cache-hit counters for regression checks.
 
 ## Acceptance Criteria
@@ -179,8 +180,8 @@ The first work package should be considered complete when:
 
 After the first end-to-end test is stable:
 
-1. Add interaction coverage for pan, zoom, tilt, reset, and display toggles.
+1. Add interaction coverage for pan, zoom, reset, and display toggles.
 2. Add malformed-file and recovery scenarios.
 3. Add settings-persistence coverage.
-4. Add benchmark markers for the 1,000-track pan/zoom/tilt scenario.
+4. Add benchmark markers for the 1,000-track pan/zoom scenario.
 5. Compare benchmark output before and after further rendering changes.
