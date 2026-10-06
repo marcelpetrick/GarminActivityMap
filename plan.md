@@ -18,9 +18,10 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
 - `activity_map`: new GUI and map-processing package.
 - `activity_map.loader`: read activity JSON files, extract track points, collect load warnings.
 - `activity_map.geo`: coordinate validation, bounds, Web Mercator projection, viewport transforms.
-- Track rendering only; no heat aggregation or density overlay remains in the GUI.
 - `activity_map.widgets`: PyQt widgets for directory selection, map canvas, status summary, and controls.
 - `python -m activity_map`: runnable GUI entry point.
+
+The GUI renders tracks only; no heat aggregation or density overlay remains.
 
 ## UI Direction
 
@@ -74,7 +75,7 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Ensure the run smoke check exercises both `python -m garmin_export --help` and a non-interactive app import/entrypoint check.
 
 7. Documentation [done]
-   - Update README with GUI run instructions, privacy notes, supported Garmin export shapes, and troubleshooting.
+   - Update the [README](README.md) with GUI run instructions, privacy notes, supported Garmin export shapes, and troubleshooting.
    - Document expected local directory structure under ignored `data/`.
    - Maintain C4-style architecture views and validate them in the local pipeline.
 
@@ -94,92 +95,95 @@ Build a local PyQt desktop application that loads ignored Garmin JSON exports fr
    - Document the map layer, cache location, and offline fallback.
 
 10. Deep map zoom [done]
-   - Raise the internal viewport zoom ceiling so users can inspect tracks at much higher detail.
-   - Keep provider tile requests capped to the supported tile zoom and scale cached tiles beyond that point.
-   - Add regression tests for deep viewport zoom and tile-request capping.
+    - Raise the internal viewport zoom ceiling so users can inspect tracks at much higher detail.
+    - Keep provider tile requests capped to the supported tile zoom and scale cached tiles beyond that point.
+    - Add regression tests for deep viewport zoom and tile-request capping.
 
 11. UI version display [done]
-   - Show the application version after the app name in the window title.
-   - Keep the map tile request identity aligned with the application version.
-   - Add a GUI regression test for the title text.
+    - Show the application version after the app name in the window title.
+    - Keep the map tile request identity aligned with the application version.
+    - Add a GUI regression test for the title text.
 
 12. Garmin export throttling [done]
-   - Add configurable delay and jitter before detailed Garmin activity calls.
-   - Skip existing activity files by default so interrupted exports can resume safely.
-   - Pace every Garmin request and retry 403, 429, 5xx, timeout, and network
-     failures with bounded exponential backoff instead of hammering the service.
-   - Document a cautious 2026 export command.
+    - Add configurable delay and jitter before detailed Garmin activity calls.
+    - Skip existing activity files by default so interrupted exports can resume safely.
+    - Pace every Garmin request and retry 403, 429, 5xx, timeout, and network
+      failures with bounded exponential backoff instead of hammering the service.
+    - Later changed: HTTP 401/403 now stop the run immediately; see the
+      [README](README.md#export).
+    - Document a cautious 2026 export command.
 
 13. Track rendering clarity [done]
-   - Render all activity tracks with one consistent color.
-   - Avoid false straight lines caused by two-point summary-only tracks.
-   - Split rendered tracks when adjacent GPS points jump an unrealistic distance.
-   - Add a bottom-right distance scale for 1 km, 2 km, and 5 km.
-   - Cover track segmentation and scale math with tests.
+    - Render all activity tracks with one consistent color.
+    - Avoid false straight lines caused by two-point summary-only tracks.
+    - Split rendered tracks when adjacent GPS points jump an unrealistic distance.
+    - Add a bottom-right distance scale for 1 km, 2 km, and 5 km.
+    - Cover track segmentation and scale math with tests.
 
 14. Track color and scale controls [done]
-   - Add a left-panel color picker for the shared activity track color.
-   - Replace the multi-row distance scale with one bottom-right scale bar.
-   - Snap scale labels to 1/2/5-style kilometer distances.
-   - Cover scale selection and track color updates with tests.
+    - Add a left-panel color picker for the shared activity track color.
+    - Replace the multi-row distance scale with one bottom-right scale bar.
+    - Snap scale labels to 1/2/5-style kilometer distances.
+    - Cover scale selection and track color updates with tests.
 
 15. Remove heatmap overlay [done]
-   - Remove heatmap computation from the app load path.
-   - Remove heatmap rendering, legend text, and heat intensity UI controls.
-   - Keep the app focused on Garmin activity tracks only.
-   - Update tests and documentation so no heatmap behavior is advertised as part of the GUI.
+    - Remove heatmap computation from the app load path.
+    - Remove heatmap rendering, legend text, and heat intensity UI controls.
+    - Keep the app focused on Garmin activity tracks only.
+    - Update tests and documentation so no heatmap behavior is advertised as part of the GUI.
 
 16. Optional track name labels [done]
-   - Add a checkbox that toggles Garmin activity names on the map.
-   - Draw each visible name in a tiny but readable font near the lower-left of its rendered track.
-   - Keep labels off by default so dense maps stay clean.
-   - Test the toggle state and label placement logic with synthetic activity names.
+    - Add a checkbox that toggles Garmin activity names on the map.
+    - Draw each visible name in a tiny but readable font near the lower-left of its rendered track.
+    - Keep labels off by default so dense maps stay clean.
+    - Test the toggle state and label placement logic with synthetic activity names.
 
 17. Interactive rendering performance [done]
-   - Retain `QPainterPath` geometry per level of detail and materialize each
-     level lazily on first paint.
-   - Cull to the viewport through a uniform-grid spatial index that is extended
-     in place while batches arrive.
-   - Select level of detail from screen-space error under an explicit visible
-     vertex budget instead of a fixed zoom threshold.
-   - Transform a cached raster during active gestures and refine after input
-     settles.
-   - Record measurements per phase in `documents/speed_improvements20260623.md`.
+    - Retain `QPainterPath` geometry per level of detail and materialize each
+      level lazily on first paint.
+    - Cull to the viewport through a uniform-grid spatial index that is extended
+      in place while batches arrive.
+    - Select level of detail from screen-space error under an explicit visible
+      vertex budget instead of a fixed zoom threshold.
+    - Transform a cached raster during active gestures and refine after input
+      settles.
+    - Record measurements per phase in [documents/speed_improvements20260623.md](documents/speed_improvements20260623.md).
 
 18. Asynchronous loading and prepared caching [done]
-   - Load and prepare tracks on a background executor and publish batches so
-     tracks appear before the archive finishes.
-   - Keep the previously loaded archive visible until the new selection
-     produces data, and stop refitting the map once the user pans or zooms.
-   - Reuse parsed tracks and prepared geometry from a versioned local cache
-     keyed by source fingerprint and geometry parameters.
+    - Load and prepare tracks on a background executor and publish batches so
+      tracks appear before the archive finishes.
+    - Keep the previously loaded archive visible until the new selection
+      produces data, and stop refitting the map once the user pans or zooms.
+    - Reuse parsed tracks and prepared geometry from a versioned local cache
+      keyed by source fingerprint and geometry parameters.
 
 19. Export observability and gap filling [done]
-   - Report an export plan, the detected activity date range, progress, and a
-     completion summary without requiring `--verbose`.
-   - Download only activities missing on disk, and complete summary-only files
-     when details are requested.
-   - Default the year range to the current calendar year back through 2017 so
-     the running year is always covered.
+    - Report an export plan, the detected activity date range, progress, and a
+      completion summary without requiring `--verbose`.
+    - Download only activities missing on disk, and complete summary-only files
+      when details are requested.
+    - Default the year range to the current calendar year back through 2017 so
+      the running year is always covered.
 
 20. Project hygiene [done]
-   - Ship the GPLv3 text and declare the license in package metadata.
-   - Require Python 3.12, matching what the Garmin client supports.
-   - Run `./localPipeline.sh` in GitHub Actions on 3.12 and 3.14 and show the
-     status badge in the README.
-   - Keep map tiles in the platform cache directory, write them atomically, and
-     pace downloads to respect the OpenStreetMap usage policy.
+    - Ship the GPLv3 text and declare the license in package metadata.
+    - Require Python 3.12, matching what the Garmin client supports.
+    - Run `./localPipeline.sh` in GitHub Actions on 3.12 and 3.14 and show the
+      status badge in the [README](README.md).
+    - Later superseded: the project standardised on Python 3.14 only (314ff72).
+    - Keep map tiles in the platform cache directory, write them atomically, and
+      pace downloads to respect the OpenStreetMap usage policy.
 
 21. Date filtering and replay [done]
-   - Record an activity start date on prepared tracks and persist it in the cache.
-   - Filter the map by an inclusive, optionally open-ended date range entered as
-     text in `YYYY-MM-DD` or picked from a calendar.
-   - Replay the archive chronologically, mapping the whole span onto ten seconds.
+    - Record an activity start date on prepared tracks and persist it in the cache.
+    - Filter the map by an inclusive, optionally open-ended date range entered as
+      text in `YYYY-MM-DD` or picked from a calendar.
+    - Replay the archive chronologically, mapping the whole span onto ten seconds.
 
 22. Release automation and project reporting [done]
-   - Publish every version from GitHub Actions with a git tag, release notes,
-     and verified artifacts, gated by the full local pipeline.
-   - Report the size and shape of the project in the README from a script.
+    - Publish every version from GitHub Actions with a git tag, release notes,
+      and verified artifacts, gated by the full local pipeline.
+    - Report the size and shape of the project in the [README](README.md) from a script.
 
 ## Done Criteria
 
