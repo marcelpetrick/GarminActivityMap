@@ -1,4 +1,4 @@
-import shutil
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -6,6 +6,7 @@ DOCUMENTS_DIR = ROOT / "documents"
 OUTPUT_DIR = ROOT / "build" / "docs"
 ARCHITECTURE_DOC = DOCUMENTS_DIR / "architecture.md"
 README = ROOT / "README.md"
+LINK_TARGET = re.compile(r"\]\((?P<target>[^)\s#]+)(?P<anchor>#[^)\s]*)?\)")
 
 REQUIRED_ARCHITECTURE_SECTIONS = (
     "## Level 1: System Context",
@@ -36,12 +37,30 @@ def _validate_architecture() -> None:
         raise SystemExit("Architecture documentation must include C4-style diagrams")
 
 
+def rewrite_links(content: str, source: Path, bundled: set[Path]) -> str:
+    """Point relative links at bundled documents to their flat bundle names."""
+
+    def replace(match: re.Match[str]) -> str:
+        target = match["target"]
+        if "://" in target or target.startswith("mailto:"):
+            return match[0]
+        resolved = (source.parent / target).resolve()
+        if resolved not in bundled:
+            return match[0]
+        return f"]({resolved.name}{match['anchor'] or ''})"
+
+    return LINK_TARGET.sub(replace, content)
+
+
 def _copy_markdown_documents() -> list[Path]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    sources = sorted([README, *DOCUMENTS_DIR.glob("*.md")])
+    bundled = {source.resolve() for source in sources}
     copied: list[Path] = []
-    for source in sorted([README, *DOCUMENTS_DIR.glob("*.md")]):
+    for source in sources:
         target = OUTPUT_DIR / source.name
-        shutil.copyfile(source, target)
+        content = rewrite_links(_read(source), source, bundled)
+        target.write_text(content, encoding="utf-8")
         copied.append(target)
     return copied
 
