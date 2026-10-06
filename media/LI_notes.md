@@ -13,4 +13,12 @@ Ten things worth knowing, as raw material for a post.
 - **Hands-off releases:** a push to master checks the version, reruns every gate, tags the commit, and publishes the wheel, sdist, docs, a metrics report and SHA256 checksums as a GitHub Release.
 - **Built with AI, held to a high bar:** about 10,000 lines of code in 110+ commits since June 2026, every dependency pinned exactly, and GPLv3 licensed. The AI wrote the code, and the pipeline decides what counts as done.
 
+## Tech stack
+
+- **Runtime:** Python 3.14, PyQt6 6.11.0 on Qt 6.11.2, garminconnect 0.3.17 for the Garmin Connect API.
+- **Map:** OpenStreetMap raster tiles with Web Mercator projection, cached on disk and fetched by a paced two-worker pool.
+- **Rendering:** retained `QPainterPath` geometry at several levels of detail, a uniform-grid spatial index for viewport culling, and a compressed prepared-geometry cache.
+- **Quality:** pytest with pytest-qt for offscreen GUI tests, ruff, strict mypy, vulture and radon, all pinned to exact versions.
+- **CI/CD:** GitHub Actions runs the same `localPipeline.sh` and publishes releases with wheel, sdist, docs and checksums.
+
 Repo: https://github.com/marcelpetrick/GarminActivityMap
