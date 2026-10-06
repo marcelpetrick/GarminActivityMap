@@ -1,7 +1,11 @@
 # Activity Map Data Flow and Performance Architecture
 
-This document describes the current desktop map architecture as reviewed on
-2026-06-23. It covers local JSON ingestion, render preparation, interaction,
+This document describes the desktop map architecture, first reviewed on
+2026-06-23 and updated for the state described under
+[Status as of 2026-08-14](#status-as-of-2026-08-14). The measured results of
+each performance phase are in
+[speed_improvements20260623.md](speed_improvements20260623.md), and the module
+overview is in [architecture.md](architecture.md). It covers local JSON ingestion, render preparation, interaction,
 painting, map tiles, threading, and the boundaries that determine performance.
 
 ## End-to-End Data Flow
@@ -11,45 +15,46 @@ flowchart LR
   U[User selects export directory]
   FS[(Garmin JSON files)]
   LD[MainWindow.load_path]
-  L[loader.load_directory]
+  LP[loading.load_and_prepare_directory]
+  PC[(Prepared snapshot cache)]
+  L[loader.load_directory_parallel]
   P[JSON parsing and recursive mapping walk]
   V[Timestamp, distance, speed, and bounds validation]
-  M[(ActivityTrack tuple)]
-  PR[render.prepare_tracks]
-  PG[Projected full geometry]
-  SG[Ramer-Douglas-Peucker simplified geometry]
+  M[(ActivityTrack batches of 50)]
+  PR[render.prepare_tracks_parallel]
+  LOD[Projected multi-level LOD geometry]
   MK[Mean-position marker]
   C[(MapCanvas render_tracks)]
   E[Mouse drag or wheel event]
   VP[Viewport pan or zoom update]
   PE[Qt paint event on GUI thread]
-  Z{Zoom tier}
+  Z{Zoom above MARKER_MAX_ZOOM?}
+  SL[lod.select_lod under a point budget]
   T[Tile lookup and drawing]
   D[Track drawing]
   O[Labels, scale, attribution]
   S[Desktop surface]
 
-  U --> LD
+  U --> LD --> LP
+  LP -->|fingerprint matches| PC
+  PC --> C
+  LP -->|cache miss| L
   FS --> L
-  LD --> L
   L --> P --> V --> M
   M --> PR
-  PR --> PG
-  PR --> SG
+  PR --> LOD
   PR --> MK
-  PG --> C
-  SG --> C
+  PR -->|after the last batch| PC
+  LOD --> C
   MK --> C
   E --> VP --> PE
   C --> PE
   PE --> T
   PE --> Z
-  Z -->|broad| MK
-  Z -->|intermediate| SG
-  Z -->|deep| PG
+  Z -->|no| MK
+  Z -->|yes| SL --> LOD
   MK --> D
-  SG --> D
-  PG --> D
+  LOD --> D
   T --> O
   D --> O
   O --> S
@@ -82,21 +87,19 @@ sequenceDiagram
   alt Valid prepared snapshot exists
     Cache-->>Worker: parsed tracks and prepared geometry
   else Cache miss or source files changed
-    Worker->>Loader: load_directory(path)
-    loop Every JSON file, sequentially
+    Worker->>Loader: load_directory_parallel(path, progress)
+    loop Every batch of 50 tracks
       Loader->>Loader: read, decode, inspect structured containers
       Loader->>Loader: validate every adjacent GPS segment
-    end
-    Loader-->>Worker: immutable ActivityTrack tuple
-    Worker->>Render: prepare_tracks(tracks)
-    loop Every retained track, sequentially
-      Render->>Render: project points and split segments
-      Render->>Render: iteratively prepare nested LOD geometry
-      Render->>Render: calculate marker and bounds
+      Loader-->>Worker: progress(report, track batch)
+      Worker->>Render: prepare_tracks_parallel(batch)
+      Render-->>Worker: projected LOD geometry, markers, bounds
+      Worker-->>Window: queued PreparedLoad batch signal
+      Window->>Canvas: append prepared batch and extend spatial index
     end
     Worker->>Cache: atomically store versioned snapshot
   end
-  Worker-->>Window: queued PreparedLoad signal
+  Worker-->>Window: queued final PreparedLoad signal
   Window->>Canvas: set_prepared_tracks(tracks, render_tracks)
   Canvas->>Canvas: install lazy path holders and fit viewport
   Canvas-->>Window: first repaint requested
@@ -145,7 +148,6 @@ flowchart TB
     APP[activity_map.app]
     W[activity_map.widgets.MainWindow]
     C[activity_map.widgets.MapCanvas]
-    L[activity_map.loader]
     R[activity_map.render]
     G[activity_map.geo]
     Q[Qt raster paint engine]
@@ -157,23 +159,26 @@ flowchart TB
 
   subgraph LOAD["Background load executor"]
     LC[activity_map.loading]
-    LP[loader and pure render preparation]
+    LP[activity_map.loader and pure render preparation]
+    PCM[activity_map.prepared_cache]
   end
 
   subgraph STORAGE["Local storage"]
     J[(Activity JSON)]
     TI[(OSM tile cache)]
     ST[(Settings JSON)]
+    PS[(Prepared snapshots)]
   end
 
   APP --> W
-  W --> L
   W --> LC
   LC --> LP
-  J --> L
+  LC --> PCM
+  PCM --> PS
+  J --> LP
   W --> C
   C --> R
-  L --> G
+  LP --> G
   R --> G
   C --> G
   C --> Q
@@ -195,7 +200,7 @@ Let:
 - `F` be JSON files;
 - `T` be retained tracks;
 - `P` be total GPS points;
-- `S` be total selected points for the current zoom tier;
+- `S` be total selected points for the current level of detail;
 - `V` be tracks intersecting the current viewport.
 
 The current major costs are:
@@ -211,9 +216,10 @@ The current major costs are:
 | Labels | `O(V)` when enabled | GUI | Cached label anchors for visible tracks |
 | Tile fetch | Network/disk dependent | workers | Already asynchronous |
 
-## Bottleneck Location
+## Historical Bottleneck (before 2026-06-23)
 
-The dominant interaction cost is `MapCanvas._draw_tracks`, specifically:
+Before the performance work, the dominant interaction cost was
+`MapCanvas._draw_tracks`, specifically:
 
 1. transforming every selected projected point with
    `Viewport.world_to_screen`;
@@ -223,22 +229,24 @@ The dominant interaction cost is `MapCanvas._draw_tracks`, specifically:
 5. repeating all work for every pan or zoom frame;
 6. drawing every track without viewport or segment culling.
 
-At broad and intermediate zoom, the existing marker/simplified caches are
-effective. At deep zoom the renderer abruptly switches to full geometry, so a
-large dataset can jump from thousands to hundreds of thousands or millions of
-draw operations. The threshold is based only on global zoom, not projected
-pixel error or visible density.
+At broad and intermediate zoom, the marker/simplified caches were effective. At
+deep zoom the renderer abruptly switched to full geometry, so a large dataset
+could jump from thousands to hundreds of thousands or millions of draw
+operations. The threshold was based only on global zoom, not projected pixel
+error or visible density.
 
-Map tilt is not implemented. Adding it to the current CPU raster path would
-require another per-point transform and would worsen the same bottleneck.
-Tilt should only be introduced after the renderer has retained geometry,
-culling, and preferably GPU-backed transforms.
+Today `_draw_tracks` issues one `drawPath` per visible retained path at the
+level chosen by `select_lod`, after a spatial-index viewport query; only the
+scale bar still uses `drawLine`.
+
+Map tilt is not implemented. It should only be introduced together with
+GPU-backed transforms, as decided in the speed improvement review.
 
 ## Status as of 2026-08-14
 
 The commit-by-commit notes that used to live here described the state before
 the performance work packages landed and are superseded by
-`speed_improvements20260623.md`, which records the measured result of each
+[speed_improvements20260623.md](speed_improvements20260623.md), which records the measured result of each
 phase. The current state of this pipeline is:
 
 - retained `QPainterPath` levels, viewport culling through a uniform grid
