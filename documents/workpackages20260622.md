@@ -1,10 +1,8 @@
-Below is a consolidated markdown document that can be given directly to an agentic software development system.
-
 # Garmin Activity Exporter and Activity Map Renderer
 
-## Master Development Specification
+Master development specification.
 
-# Project Overview
+## Project Overview
 
 This project consists of two major subsystems:
 
@@ -20,11 +18,11 @@ The objective is to produce a high-quality, maintainable, well-tested, productio
 
 ---
 
-# General Engineering Requirements
+## General Engineering Requirements
 
 The following requirements apply to all work packages.
 
-## Quality Standards
+### Quality Standards
 
 * Follow clean architecture principles where practical.
 * Minimize coupling between modules.
@@ -34,7 +32,7 @@ The following requirements apply to all work packages.
 * Avoid duplicated logic.
 * Keep public APIs stable and documented.
 
-## Testing Requirements
+### Testing Requirements
 
 All newly introduced functionality must include:
 
@@ -45,7 +43,7 @@ All newly introduced functionality must include:
 
 Coverage should be measured and enforced.
 
-## Documentation Requirements
+### Documentation Requirements
 
 All major modules should contain:
 
@@ -53,7 +51,7 @@ All major modules should contain:
 * Public API documentation
 * Usage examples where applicable
 
-## Reliability Requirements
+### Reliability Requirements
 
 The application must:
 
@@ -65,15 +63,15 @@ The application must:
 
 ---
 
-# WP1 — Robust Garmin Activity Export Pipeline
+## WP1 — Robust Garmin Activity Export Pipeline
 
-## Goal
+### Goal
 
 Implement a reliable export pipeline for downloading Garmin activity data back to 2017 while respecting server limitations.
 
-## Requirements
+### Requirements
 
-### Export Rate Limiting
+#### Export Rate Limiting
 
 Implement controlled request pacing.
 
@@ -85,7 +83,7 @@ Baseline target:
 
 The implementation must allow configuration of the request rate.
 
-### Retry and Backoff
+#### Retry and Backoff
 
 Handle:
 
@@ -97,7 +95,7 @@ Handle:
 
 Apply exponential backoff and retry logic.
 
-### Resume Support
+#### Resume Support
 
 Persist export state.
 
@@ -109,7 +107,7 @@ Support:
 
 Avoid duplicate exports.
 
-### Progress Tracking
+#### Progress Tracking
 
 Track:
 
@@ -119,7 +117,7 @@ Track:
 * retries
 * estimated completion time
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Historical exports back to 2017 are supported.
 * Long-running exports complete reliably.
@@ -128,15 +126,15 @@ Track:
 
 ---
 
-# WP2 — GPS Validation and Track Rendering Corrections
+## WP2 — GPS Validation and Track Rendering Corrections
 
-## Goal
+### Goal
 
 Remove rendering spikes and invalid geometry from displayed activity tracks.
 
-## Requirements
+### Requirements
 
-### Coordinate Validation
+#### Coordinate Validation
 
 Verify:
 
@@ -146,7 +144,7 @@ Verify:
 
 Confirm correct coordinate interpretation.
 
-### Projection Validation
+#### Projection Validation
 
 Verify conversion between:
 
@@ -154,7 +152,7 @@ Verify conversion between:
 * WGS84 coordinates
 * OpenStreetMap map coordinates
 
-### Segment Validation
+#### Segment Validation
 
 For every segment:
 
@@ -164,7 +162,7 @@ Compute:
 * time delta
 * implied speed
 
-### Outlier Detection
+#### Outlier Detection
 
 Implement configurable filtering.
 
@@ -174,7 +172,7 @@ Initial threshold:
 
 Segments exceeding the threshold should be flagged.
 
-### Rendering Validation
+#### Rendering Validation
 
 Verify:
 
@@ -184,7 +182,7 @@ Verify:
 * invalid coordinates
 * broken segments
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Wild rendering spikes are removed.
 * Corrupt segments are detected.
@@ -192,15 +190,15 @@ Verify:
 
 ---
 
-# WP3 — Track Data Model and Rendering Optimization
+## WP3 — Track Data Model and Rendering Optimization
 
-## Goal
+### Goal
 
 Improve rendering performance and scalability.
 
-## Requirements
+### Requirements
 
-### Track Data Model
+#### Track Data Model
 
 Store:
 
@@ -214,7 +212,7 @@ Store:
 * duration
 * bounding box
 
-### Bounding Boxes
+#### Bounding Boxes
 
 Compute:
 
@@ -225,18 +223,18 @@ Compute:
 * width
 * height
 
-### Speed Calculations
+#### Speed Calculations
 
 Compute per-segment speed using geodesic distance calculations.
 
-### Zoom-Aware Rendering
+#### Zoom-Aware Rendering
 
 When zoomed out:
 
 * avoid drawing full geometry
 * use simplified representations
 
-### Simplified Geometry
+#### Simplified Geometry
 
 Support:
 
@@ -245,7 +243,7 @@ Support:
 * simplified polylines
 * cached geometry
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Large datasets remain interactive.
 * Rendering scales efficiently.
@@ -253,27 +251,27 @@ Support:
 
 ---
 
-# WP4 — Local Quality Pipeline and Static Analysis
+## WP4 — Local Quality Pipeline and Static Analysis
 
-## Goal
+### Goal
 
 Create a comprehensive local validation pipeline.
 
-## Requirements
+### Requirements
 
-### Pipeline Script
+#### Pipeline Script
 
 Create a single entry-point script.
 
-### Formatting Checks
+#### Formatting Checks
 
 Run formatter validation.
 
-### Linting
+#### Linting
 
 Run all applicable linters.
 
-### Static Analysis
+#### Static Analysis
 
 Run available tools for:
 
@@ -284,17 +282,17 @@ Run available tools for:
 * dependency analysis
 * architecture validation
 
-### Unit Tests
+#### Unit Tests
 
 Execute all tests.
 
-### Coverage
+#### Coverage
 
 Generate coverage reports.
 
 Enforce a minimum coverage threshold.
 
-### Status Summary
+#### Status Summary
 
 Print a final summary showing:
 
@@ -305,14 +303,14 @@ Print a final summary showing:
 * coverage
 * architecture checks
 
-### Exit Codes
+#### Exit Codes
 
 Return:
 
 * 0 on success
 * non-zero on failure
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Pipeline can be executed locally.
 * Failures are clearly reported.
@@ -320,15 +318,15 @@ Return:
 
 ---
 
-# WP5 — Persistent User Settings
+## WP5 — Persistent User Settings
 
-## Goal
+### Goal
 
 Persist application settings across restarts.
 
-## Requirements
+### Requirements
 
-### Settings Storage
+#### Settings Storage
 
 Store settings in a structured configuration file.
 
@@ -338,7 +336,7 @@ Possible formats:
 * TOML
 * YAML
 
-### Persisted Properties
+#### Persisted Properties
 
 Include:
 
@@ -348,15 +346,15 @@ Include:
 * application preferences
 * future configuration fields
 
-### Startup Loading
+#### Startup Loading
 
 Load settings automatically on startup.
 
-### Runtime Updates
+#### Runtime Updates
 
 Persist changes automatically.
 
-### Robustness
+#### Robustness
 
 Handle:
 
@@ -366,11 +364,11 @@ Handle:
 * unknown fields
 * version upgrades
 
-### Recovery
+#### Recovery
 
 Fallback to safe defaults when necessary.
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Settings survive restarts.
 * Corrupted files do not crash the application.
@@ -378,15 +376,15 @@ Fallback to safe defaults when necessary.
 
 ---
 
-# WP6 — Agentic Development Workflow and Commit Discipline
+## WP6 — Agentic Development Workflow and Commit Discipline
 
-## Goal
+### Goal
 
 Ensure safe, auditable, high-quality operation when agentic software development tools modify the codebase.
 
-## Requirements
+### Requirements
 
-### Mandatory Commit Before Major Actions
+#### Mandatory Commit Before Major Actions
 
 Before any major automated operation, the agent must:
 
@@ -403,7 +401,7 @@ Major actions include:
 * dependency upgrades
 * architecture migrations
 
-### Small Incremental Changes
+#### Small Incremental Changes
 
 Prefer:
 
@@ -413,11 +411,11 @@ Prefer:
 
 Avoid large unreviewable changes.
 
-### Traceability
+#### Traceability
 
 Every automated change should be traceable through commit history.
 
-### Verification Before Commit
+#### Verification Before Commit
 
 Before creating a commit:
 
@@ -430,7 +428,7 @@ Run:
 
 when practical.
 
-### Recovery
+#### Recovery
 
 Agent workflows must support:
 
@@ -438,7 +436,7 @@ Agent workflows must support:
 * bisecting
 * incremental recovery
 
-### Documentation
+#### Documentation
 
 Record:
 
@@ -446,7 +444,7 @@ Record:
 * major decisions
 * architectural changes
 
-### Acceptance Criteria
+#### Acceptance Criteria
 
 * Every significant automated modification is committed.
 * Commits are reviewable and traceable.
@@ -455,7 +453,7 @@ Record:
 
 ---
 
-# Final Success Criteria
+## Final Success Criteria
 
 The finished product should:
 
