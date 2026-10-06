@@ -10,11 +10,11 @@ A private-first archive tool for turning a Garmin Connect account into a local, 
 
 ## TL;DR
 
-After completing the setup below, export all activities from 2017 through 2026:
+After completing the setup below, export all activities from 2017 through the current year:
 
 ```bash
 export GARMIN_EMAIL='garmin-user@example.com'
-./exportGarminYears.sh --start-year 2026 --end-year 2017
+./exportGarminYears.sh
 ```
 
 Enter your Garmin password and MFA code when prompted. The export is resumable,
@@ -37,14 +37,14 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.99`
+- Version: `0.0.100`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.99` with `python scripts/project_metrics.py`.
+Measured for version `0.0.100` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
@@ -157,8 +157,8 @@ The activity list is always re-queried, because that is how new activities are
 detected, but only activities whose `activities/<activity-id>.json` file is
 missing are downloaded. A rerun of the same command therefore fills gaps -
 newly recorded activities and activities that failed earlier - instead of
-downloading the archive again. `--no-skip-existing` opts out and re-downloads
-everything. Add `--verbose` for a timestamped line per Garmin request, retry,
+downloading the archive again. On the single-export CLI, `--no-skip-existing`
+opts out and re-downloads everything. Add `--verbose` for a timestamped line per Garmin request, retry,
 and file write.
 
 A detailed run also completes activities that were previously exported with
@@ -203,7 +203,7 @@ leaves `export-state.json` with a non-zero `pending` count and writes no
 `manifest.json`.
 
 Before the first Garmin request the script prints the repository path, the
-interpreter it activated, the output root, the pacing flags, the extra flags it
+Python version it activated, the output root, the pacing flags, the extra flags it
 received, and a reminder that existing activity files are skipped. Each year
 then prints its own plan and completion block, and the run ends with a per-year
 summary of new, already present, and failed activities including the detected
@@ -249,7 +249,7 @@ count stop the export instead of looping indefinitely.
 python -m activity_map data/garmin/activities
 ```
 
-The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`~/.cache/GarminActivityMap/map_tiles/osm` by default, or `$XDG_CACHE_HOME`); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Stale tiles remain visible while one background refresh is attempted. The in-memory tile set is capped at 256 images and the on-disk cache at 8,192 tiles or 512 MiB, whichever comes first, evicting the oldest entries first. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers, with a burst of 24 downloads allowed so a fresh view fills immediately and a sustained ceiling of five downloads per second across all workers afterwards; fresh tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
+The desktop app loads Garmin JSON exports from an ignored local directory and renders activity tracks over an OpenStreetMap base layer. Downloaded map tiles are cached under the platform cache directory (`$XDG_CACHE_HOME/GarminActivityMap/map_tiles/osm`, or `~/.cache/GarminActivityMap/map_tiles/osm` when `XDG_CACHE_HOME` is unset); repeat views use the local cache, and panning or zooming automatically requests newly visible tiles. Stale tiles remain visible while one background refresh is attempted. The in-memory tile set is capped at 256 images and the on-disk cache at 8,192 tiles or 512 MiB, whichever comes first, evicting the oldest entries first. Set `ACTIVITY_MAP_TILE_CACHE_DIR` to relocate that cache. Following the OpenStreetMap tile usage policy, tiles are fetched by at most two workers, with a burst of 24 downloads allowed so a fresh view fills immediately and a sustained ceiling of five downloads per second across all workers afterwards; fresh tiles already in the cache are served without any delay. The location no longer depends on the working directory the app was started from, so tiles cannot land in an unrelated project folder.
 
 Expected local layout:
 
@@ -259,8 +259,8 @@ data/
     activities/
       manifest.json
       activities/
-        activity-123456789.json
-        activity-987654321.json
+        123456789.json
+        987654321.json
 ```
 
 Controls:
@@ -268,10 +268,10 @@ Controls:
 - Open Directory: choose a folder containing exported Garmin JSON files.
 - Reset View: fit the visible map back to the loaded tracks.
 - Track Color: choose one shared color for all rendered activity tracks.
-- Track Opacity: make individual routes lighter or stronger.
+- Track opacity: make individual routes lighter or stronger.
 - Show track names: draw each Garmin activity name near its rendered track.
 - Date range: limit the map to activities recorded in a period. Both fields take a date typed as `YYYY-MM-DD`, and the `Pick` button next to each opens a calendar that writes the same format back into the field. Leave a field empty for an open-ended range, fill neither to show everything, and use `Show all dates` to clear both. The line below the fields reports how many of the loaded tracks are in range. A date is applied when you press Enter or leave the field; unparseable text is reported, highlighted, and ignored rather than silently dropping tracks. While a range is active, activities whose export carries no timestamp cannot be placed in time and are hidden.
-- Map Opacity: make the OpenStreetMap base layer subtle or prominent.
+- Map opacity: make the OpenStreetMap base layer subtle or prominent.
 - OpenStreetMap layer: toggle the map base layer while keeping tracks visible.
 - Drag the map to pan, use the mouse wheel to zoom deeply around the cursor, and double-click the map to reset.
 - While a directory is still loading, the map keeps fitting each newly arriving batch of tracks until you pan or zoom. Selecting another directory cooperatively cancels the superseded load so the new one can start promptly. After that the view stays where you put it, and Reset View or a double-click hands control back to automatic fitting.
@@ -303,7 +303,8 @@ uses cached markers at broad zoom, simplified polylines at intermediate zoom,
 and full validated geometry when zoomed in.
 
 Parsed tracks and prepared geometry are cached in a compressed binary snapshot
-under the platform cache directory for faster repeat startup and substantially
+under the platform cache directory (`$XDG_CACHE_HOME/GarminActivityMap/prepared`,
+or `~/.cache/GarminActivityMap/prepared`) for faster repeat startup and substantially
 less disk and serialization overhead. Cache entries are keyed by the resolved
 dataset path, the geometry parameters that produced the snapshot (level-of-detail
 tolerances, simplification tolerance, segment-split distance, minimum rendered
@@ -358,8 +359,8 @@ QT_QPA_PLATFORM=offscreen ACTIVITY_MAP_DISABLE_TILES=1 \
   --cov=activity_map.widgets --cov-report=term-missing --cov-fail-under=0
 ```
 
-Current result for that focused check: `10 passed`; `activity_map/widgets.py`
-reports 95% coverage. The total shown by that scoped command is lower because
+Current result for that focused check: `29 passed`; `activity_map/widgets.py`
+reports 96% coverage. The total shown by that scoped command is lower because
 the project-wide coverage configuration still includes non-UI modules.
 
 ## Continuous Integration
