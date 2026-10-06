@@ -12,4 +12,4 @@ So here is version 0.0110 of 𝐆𝐚𝐫𝐦𝐢𝐧𝐀𝐜𝐭𝐢𝐯𝐢�
 
 It really stands on the shoulders of giants: big thanks to the people behind OpenStreetMap and all the frameworks used. It would not be possible to create such a custom project without their work.
 
-PS. To resolve the headline: those are the streets adjacent to the @DataModul headquarter in Munich/Laim.
+PS. to resolve the headline: those are the streets adjacent to the @DataModul headquarter in Munich/Laim.
