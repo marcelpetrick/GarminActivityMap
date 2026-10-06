@@ -6,10 +6,9 @@
 - Run the activity map GUI: `python -m activity_map data/garmin/activities`
 - Run the GUI smoke check: `QT_QPA_PLATFORM=offscreen python -m activity_map --smoke-test`
 - Install runtime dependencies: `python -m pip install -r requirements.txt`
-- Run tests: `python -m pytest`
-- Run tests with coverage: `python -m pytest --cov=activity_map --cov=garmin_export --cov-report=term-missing --cov-fail-under=95`
+- Run tests with coverage: `python -m pytest` (the `pyproject.toml` options add `--cov` and enforce `--cov-fail-under=95`)
 - Run linting: `python -m ruff check .`
-- Run static analysis: `python -m mypy activity_map garmin_export tests`
+- Run static analysis: `python -m mypy activity_map garmin_export tests benchmarks`
 - Build documentation: `python scripts/build_docs.py`
 - Run the full local pipeline: `./localPipeline.sh`
 - Check repository status before every commit: `git status --short`
@@ -44,7 +43,7 @@
 - Unit tests must cover parser behavior, malformed input handling, coordinate projection, bounds calculation, and render preparation.
 - Add GUI smoke tests where practical without requiring private Garmin data.
 - Keep the pipeline's run step non-interactive: CLI help plus GUI offscreen smoke only.
-- Keep C4-style architecture documentation valid through the documentation build step.
+- Keep the C4-style [architecture documentation](architecture.md) valid through the documentation build step.
 - Maintain coverage at or above 95%; do not exclude testable application code
   merely to satisfy the threshold.
 
@@ -75,7 +74,8 @@ dependency upgrades, or architecture migrations:
 
 Do not combine unrelated work packages in one commit. Record the work package
 and significant architectural decisions in the commit subject/body and update
-the relevant architecture or usage documentation. Prefer additive migrations
+the relevant [architecture](architecture.md) or usage documentation
+([README](../README.md)). Prefer additive migrations
 and small reversible changes so `git revert`, `git bisect`, and incremental
 recovery remain practical.
 
