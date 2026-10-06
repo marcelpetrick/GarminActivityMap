@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the project using C4-style views. It focuses on the software boundaries, runtime containers, and core components needed to export private Garmin activity data and visualize local tracks.
+This document describes the project using C4-style views. The detailed map runtime is described in [data_flow.md](data_flow.md). It focuses on the software boundaries, runtime containers, and core components needed to export private Garmin activity data and visualize local tracks.
 
 ## Level 1: System Context
 
@@ -10,15 +10,17 @@ flowchart LR
   garmin[Garmin Connect]
   app[Garmin Visualize All Activities]
   disk[(Local ignored data directory)]
+  osm[OpenStreetMap tile server]
 
   user -->|starts export and enters password manually| app
   app -->|authenticated activity reads| garmin
   app -->|writes JSON exports| disk
   user -->|opens local export directory| app
   app -->|reads JSON tracks| disk
+  app -->|downloads base-map tiles| osm
 ```
 
-The system is a local desktop and command-line application. It authenticates only when exporting, stores activity JSON under ignored local paths, and visualizes existing local files without sending track coordinates to map providers.
+The system is a local desktop and command-line application. It authenticates only when exporting, stores activity JSON under ignored local paths, and visualizes existing local files. The map downloads OpenStreetMap base-map tiles for the visible area, but never sends track coordinates or activity data to the tile server.
 
 ## Level 2: Container View
 
@@ -40,7 +42,6 @@ flowchart TB
 
 - Exporter CLI: `garmin_export`, responsible for Garmin login, paced and retried activity requests, resumable progress checkpoints, detail retrieval, and atomic JSON writing.
 - PyQt desktop GUI: `activity_map`, responsible for loading exports, parsing GPS tracks, projecting coordinates, and rendering the interactive map.
-- Map tile cache: `activity_map.tiles`, responsible for choosing visible OpenStreetMap tiles, using a clear request identity, and caching downloaded base-map images under ignored local storage.
 - Documentation build: `scripts/build_docs.py`, responsible for validating required C4 sections and producing a local documentation bundle.
 - Quality pipeline: `localPipeline.sh`, responsible for bootstrap, formatting, linting, type/dead-code/complexity/dependency analysis, architecture enforcement, docs and package builds, tests, coverage, and smoke runs.
 
@@ -53,6 +54,7 @@ flowchart LR
   geo[activity_map.geo]
   render[activity_map.render]
   loading[activity_map.loading]
+  prepared_cache[activity_map.prepared_cache]
   dates[activity_map.dates]
   filters[activity_map.filters]
   replay[activity_map.replay]
@@ -67,33 +69,45 @@ flowchart LR
   app --> widgets
   widgets --> settings
   widgets --> loading
-  loading --> loader
-  loading --> render
-  loader --> models
-  render --> models
+  widgets --> loader
+  widgets --> models
   widgets --> geo
   widgets --> render
   widgets --> lod
-  widgets --> dates
-  widgets --> filters
-  widgets --> replay
-  replay --> render
-  filters --> render
-  settings --> dates
   widgets --> spatial
   widgets --> qt_render
   widgets --> tiles
+  widgets --> dates
+  widgets --> filters
+  widgets --> replay
+  loading --> loader
+  loading --> prepared_cache
+  loading --> render
+  loading --> models
+  prepared_cache --> loader
+  prepared_cache --> render
+  prepared_cache --> geo
+  prepared_cache --> models
+  loader --> geo
+  loader --> models
   render --> geo
+  render --> models
   qt_render --> render
   qt_render --> geo
+  qt_render --> models
   spatial --> render
   spatial --> geo
   lod --> render
+  filters --> render
+  replay --> render
+  tiles --> geo
+  settings --> dates
+  geo --> models
 ```
 
 - `activity_map.loader` recursively reads Garmin JSON files, validates coordinates and timestamps, computes segment speed, and flags malformed, coordinate-free, or implausible geometry without changing source payloads.
 - `activity_map.geo` owns coordinate bounds, Web Mercator projection, viewport transforms, pan, zoom, and fit behavior.
-- `activity_map.render` prepares cached marker, simplified-polyline, and detailed geometry so painting remains responsive and selects detail by zoom.
+- `activity_map.render` prepares projected marker geometry and multi-level simplified geometry so painting remains responsive.
 - `activity_map.loading` coordinates cooperatively cancellable background loading and immutable prepared snapshots without blocking the GUI thread.
 - `activity_map.dates` parses and formats the single `YYYY-MM-DD` date vocabulary shared by the UI and the settings store.
 - `activity_map.filters` reports the date span of a prepared set and selects the tracks inside an inclusive, optionally open-ended range.
@@ -135,13 +149,13 @@ sequenceDiagram
   U->>M: Open ignored export directory
   M->>D: Load JSON files
   M->>M: Parse, project, cache render data
-  M-->>U: Interactive offline map
+  M-->>U: Interactive map with locally cached OSM tiles
 ```
 
 ## Operational Constraints
 
 - Generated docs, package builds, test caches, Garmin exports, and GUI output remain ignored.
-- Documentation must build with `python scripts/build_docs.py`.
+- Documentation must build with `python scripts/build_docs.py`, which validates this document and bundles it with the [README](../README.md) and the other documents.
 - The full local pipeline must pass before each commit.
 - The same pipeline runs on GitHub Actions through `.github/workflows/local-pipeline.yml`, offscreen and with tile downloads disabled.
 - `.github/workflows/release.yml` publishes a tagged GitHub Release for every new version, but only after that same pipeline passes and the version is consistent across `VERSION`, `pyproject.toml`, and the package. Publication is resumable when tag creation succeeded but release creation did not: the existing tag is verified against the release commit and reused.
