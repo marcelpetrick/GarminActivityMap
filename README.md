@@ -37,14 +37,14 @@ python -m activity_map data/garmin
 
 **Note: project is generated with AI.**
 
-- Version: `0.0.107`
+- Version: `0.0.108`
 - Runtime: Python 3.14 (the version used for development, the local pipeline, and CI)
 
 ## Project Size
 
 <!-- project-metrics:start -->
 
-Measured for version `0.0.107` with `python scripts/project_metrics.py`.
+Measured for version `0.0.108` with `python scripts/project_metrics.py`.
 
 | Area | Files | Lines | Code lines | Classes | Functions |
 |---|---:|---:|---:|---:|---:|
@@ -395,11 +395,11 @@ git commit
 ```
 
 The detailed incremental-change, rollback, and traceability rules are in
-`documents/AGENTS.md`.
+[documents/AGENTS.md](documents/AGENTS.md).
 
 ## Architecture Documentation
 
-The C4-style architecture views live in `documents/architecture.md`. Build and validate the local documentation bundle with:
+The C4-style architecture views live in [documents/architecture.md](documents/architecture.md). Build and validate the local documentation bundle with:
 
 ```bash
 python scripts/build_docs.py
@@ -408,7 +408,8 @@ python scripts/build_docs.py
 Generated documentation output is written to ignored `build/docs/`.
 
 The detailed map runtime flow and the 2026-06-23 performance review are in
-`documents/data_flow.md` and `documents/speed_improvements20260623.md`.
+[documents/data_flow.md](documents/data_flow.md) and
+[documents/speed_improvements20260623.md](documents/speed_improvements20260623.md).
 Reproduce the synthetic 1,000-track rendering benchmark with:
 
 ```bash
