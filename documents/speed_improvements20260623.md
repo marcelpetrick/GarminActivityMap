@@ -516,7 +516,7 @@ paths, culling, and adaptive LOD already do that. Its value is stable immediate
 feedback during rapid input and avoiding redundant refined frames for wheel
 events that arrive faster than the display can present them.
 
-### Phase 6 — Remove Residual Full-Dataset Work
+### Phase 6 (unplanned) — Remove Residual Full-Dataset Work
 
 Implemented in version `0.0.39`:
 
@@ -556,6 +556,9 @@ Final measurements on the reference machine:
 | 2,000 distributed tracks, deep frame | not previously practical | about 3.1 ms |
 | 2,000 distributed tracks, pan | not previously practical | about 3.4 ms |
 
+The "Before" figures in this document come from separate benchmark runs, so the
+deep-frame baseline varies between about 449 ms and 498 ms.
+
 The original 1,000-track deep-frame case improved by roughly 225×. The final
 2,000-track interaction remains well below a 16.7 ms 60-FPS frame budget.
 
@@ -567,7 +570,7 @@ For 1,000 tracks × 300 points, process peak-RSS deltas were approximately:
 |---|---:|
 | Prepared projected and multi-LOD geometry | 36 MB |
 | Qt retained paths and indexes | 12 MB |
-| Total beyond the already-loaded source model | 49 MB |
+| Total beyond the already-loaded source model | 49 MB (rows are rounded) |
 
 Memory should scale approximately with source and retained vertex count. Around
 100 MB of additional retained geometry for 2,000 similar tracks is acceptable
@@ -648,12 +651,16 @@ The relevant end-to-end acceptance metrics are now:
 
 ## Benchmark `before`
 
-```
+```bash
 python benchmarks/benchmark_map_render.py \
     --tracks 1000 \
     --points-per-track 300 \
     --frames 12
+```
 
+Output:
+
+```text
 # Activity map rendering benchmark
 
 - Platform: Linux-7.0.10-1-MANJARO-x86_64-with-glibc2.43
